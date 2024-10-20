@@ -47,10 +47,14 @@ class BufferPoolManager {
   ~BufferPoolManager();
 
   /** @brief Return the size (number of frames) of the buffer pool. */
-  auto GetPoolSize() -> size_t { return pool_size_; }
+  auto GetPoolSize() -> size_t { 
+    return pool_size_; 
+  }
 
   /** @brief Return the pointer to all the pages in the buffer pool. */
-  auto GetPages() -> Page * { return pages_; }
+  auto GetPages() -> Page * { 
+    return pages_; 
+  }
 
   /**
    * TODO(P1): Add implementation
@@ -70,20 +74,6 @@ class BufferPoolManager {
    * @return nullptr if no new pages could be created, otherwise pointer to new page
    */
   auto NewPage(page_id_t *page_id) -> Page *;
-
-  /**
-   * TODO(P1): Add implementation
-   *
-   * @brief PageGuard wrapper for NewPage
-   *
-   * Functionality should be the same as NewPage, except that
-   * instead of returning a pointer to a page, you return a
-   * BasicPageGuard structure.
-   *
-   * @param[out] page_id, the id of the new page
-   * @return BasicPageGuard holding a new page
-   */
-  auto NewPageGuarded(page_id_t *page_id) -> BasicPageGuard;
 
   /**
    * TODO(P1): Add implementation
@@ -121,6 +111,19 @@ class BufferPoolManager {
   auto FetchPageRead(page_id_t page_id) -> ReadPageGuard;
   auto FetchPageWrite(page_id_t page_id) -> WritePageGuard;
 
+  /**
+   * TODO(P1): Add implementation
+   *
+   * @brief PageGuard wrapper for NewPage
+   *
+   * Functionality should be the same as NewPage, except that
+   * instead of returning a pointer to a page, you return a
+   * BasicPageGuard structure.
+   *
+   * @param[out] page_id, the id of the new page
+   * @return BasicPageGuard holding a new page
+   */
+  auto NewPageGuarded(page_id_t *page_id) -> BasicPageGuard;
   /**
    * TODO(P1): Add implementation
    *
