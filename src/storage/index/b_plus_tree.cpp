@@ -18,15 +18,22 @@ BPLUSTREE_TYPE::BPlusTree(std::string name, page_id_t header_page_id, BufferPool
       internal_max_size_(internal_max_size),
       header_page_id_(header_page_id) {
   WritePageGuard guard = bpm_->FetchPageWrite(header_page_id_);
-  auto root_page = guard.AsMut<BPlusTreeHeaderPage>();
-  root_page->root_page_id_ = INVALID_PAGE_ID;
+  auto root_header_page = guard.template AsMut<BPlusTreeHeaderPage>();
+  root_header_page->root_page_id_ = INVALID_PAGE_ID;
 }
 
 /*
  * Helper function to decide whether current b+tree is empty
  */
 INDEX_TEMPLATE_ARGUMENTS
-auto BPLUSTREE_TYPE::IsEmpty() const -> bool { return true; }
+auto BPLUSTREE_TYPE::IsEmpty() const -> bool {
+  bool is_empty{false};
+  ReadPageGuard guard = bpm_->FetchPageRead(header_page_id_);
+  auto root_header_page = guard.As<BPlusTreeHeaderPage>();
+  is_empty = root_header_page->root_page_id_ == INVALID_PAGE_ID;
+  guard.Drop();
+  return is_empty;
+}
 /*****************************************************************************
  * SEARCH
  *****************************************************************************/

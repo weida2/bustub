@@ -47,14 +47,10 @@ class BufferPoolManager {
   ~BufferPoolManager();
 
   /** @brief Return the size (number of frames) of the buffer pool. */
-  auto GetPoolSize() -> size_t { 
-    return pool_size_; 
-  }
+  auto GetPoolSize() -> size_t { return pool_size_; }
 
   /** @brief Return the pointer to all the pages in the buffer pool. */
-  auto GetPages() -> Page * { 
-    return pages_; 
-  }
+  auto GetPages() -> Page * { return pages_; }
 
   /**
    * TODO(P1): Add implementation

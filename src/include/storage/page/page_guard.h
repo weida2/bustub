@@ -145,6 +145,7 @@ class ReadPageGuard {
  private:
   // You may choose to get rid of this and add your own private variables.
   BasicPageGuard guard_;
+  bool already_unlock_{false};
 };
 
 class WritePageGuard {
@@ -212,6 +213,7 @@ class WritePageGuard {
  private:
   // You may choose to get rid of this and add your own private variables.
   BasicPageGuard guard_;
+  bool already_unlock_{false};
 };
 
 }  // namespace bustub

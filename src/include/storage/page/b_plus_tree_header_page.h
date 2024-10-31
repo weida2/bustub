@@ -1,6 +1,7 @@
 #pragma once
 
 #include "common/config.h"
+#include "common/macros.h"
 
 namespace bustub {
 
