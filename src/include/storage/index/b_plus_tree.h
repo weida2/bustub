@@ -91,6 +91,14 @@ class BPlusTree {
 
   auto Begin(const KeyType &key) -> INDEXITERATOR_TYPE;
 
+  auto FindInternal(const KeyType &key, const BPlusTreePage *bp_page) -> int;
+
+  auto FindLeaf(const KeyType &key, const BPlusTreePage *bp_page) -> int;
+
+  auto BeginFindLeaf(const KeyType &key, const LeafPage *leaf_page) -> int;
+
+  auto BeginFindInternal(const KeyType &key, const InternalPage *internal_page) -> int;
+
   // Print the B+ tree
   void Print(BufferPoolManager *bpm);
 
