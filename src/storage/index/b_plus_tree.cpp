@@ -17,6 +17,9 @@ BPLUSTREE_TYPE::BPlusTree(std::string name, page_id_t header_page_id, BufferPool
       leaf_max_size_(leaf_max_size),
       internal_max_size_(internal_max_size),
       header_page_id_(header_page_id) {
+#ifdef WZC_
+  LOG_DEBUG("leaf_max_size_: %d, internal_max_size_: %d\n", leaf_max_size_, internal_max_size_);
+#endif
   WritePageGuard guard = bpm_->FetchPageWrite(header_page_id_);
   auto root_header_page = guard.template AsMut<BPlusTreeHeaderPage>();
   root_header_page->root_page_id_ = INVALID_PAGE_ID;
@@ -172,7 +175,7 @@ auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transact
     }
     ctx.write_set_.push_back(std::move(cur_guard));
   }
-
+  // ctx.write_set_[0].guard_.page_->page_id_
   // 找到叶子结点
   auto leaf_guard = std::move(ctx.write_set_.back());
   auto leaf_page_nomut = leaf_guard.As<LeafPage>();
@@ -311,8 +314,8 @@ auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transact
       }
     }
     parent_inter_page->SetSize(parent_inter_page->GetMaxSize() / 2 + 1);
-    split_inter_page->SetKeyAt(split_inter_page->GetMaxSize() - 1, k_ins);
-    split_inter_page->SetValueAt(split_inter_page->GetMaxSize() - 1, p_ins);
+    split_inter_page->SetKeyAt(split_inter_page->GetSize() - 1, k_ins);
+    split_inter_page->SetValueAt(split_inter_page->GetSize() - 1, p_ins);
 
     origin_key = parent_inter_page->KeyAt(1);  // no use
     origin_page_id = parent_inter_guard.PageId();

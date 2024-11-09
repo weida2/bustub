@@ -1,6 +1,5 @@
 #include "storage/page/page_guard.h"
 #include "buffer/buffer_pool_manager.h"
-
 namespace bustub {
 
 BasicPageGuard::BasicPageGuard(BasicPageGuard &&that) noexcept
@@ -62,6 +61,12 @@ void ReadPageGuard::Drop() {
   if (guard_.page_ != nullptr && !already_unlock_) {
     already_unlock_ = true;
     guard_.page_->RUnlatch();
+#ifdef WZC_
+    auto log = std::stringstream();
+    log << "--[thread " << std::this_thread::get_id() << "] | 释放page: " << guard_.page_->GetPageId() << " 读 锁"
+        << std::endl;
+    LOG_DEBUG("%s", log.str().c_str());
+#endif
     guard_.Drop();
   }
 }
@@ -96,6 +101,12 @@ void WritePageGuard::Drop() {
   if (guard_.page_ != nullptr && !already_unlock_) {
     already_unlock_ = true;
     guard_.page_->WUnlatch();
+#ifdef WZC_
+    auto log = std::stringstream();
+    log << "--[thread " << std::this_thread::get_id() << "] | 释放page: " << guard_.page_->GetPageId() << " 写 锁"
+        << std::endl;
+    LOG_DEBUG("%s", log.str().c_str());
+#endif
     guard_.Drop();
   }
 }

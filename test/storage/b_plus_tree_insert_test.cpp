@@ -85,12 +85,18 @@ TEST(BPlusTreeTests, InsertTest2) {
     rid.Set(static_cast<int32_t>(key >> 32), value);
     index_key.SetFromInteger(key);
     tree.Insert(index_key, rid, transaction);
+#ifdef WZC_
+    std::cout << "插入key :" << index_key << std::endl;
+#endif
   }
 
   std::vector<RID> rids;
   for (auto key : keys) {
     rids.clear();
     index_key.SetFromInteger(key);
+#ifdef WZC_
+    std::cout << "查找key :" << index_key << std::endl;
+#endif
     tree.GetValue(index_key, &rids);
     EXPECT_EQ(rids.size(), 1);
 

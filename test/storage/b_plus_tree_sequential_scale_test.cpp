@@ -56,10 +56,19 @@ TEST(BPlusTreeTests, ScaleTest) {  // NOLINT
   // randomized the insertion order
   auto rng = std::default_random_engine{};
   std::shuffle(keys.begin(), keys.end(), rng);
+#ifdef WZC_
+  for (auto key : keys) {
+    std::cout << key << " ";
+  }
+  std::cout << "\n";
+#endif
   for (auto key : keys) {
     int64_t value = key & 0xFFFFFFFF;
     rid.Set(static_cast<int32_t>(key >> 32), value);
     index_key.SetFromInteger(key);
+#ifdef WZC_
+    // std::cout << "插入key :" << index_key << std::endl;
+#endif
     tree.Insert(index_key, rid, transaction);
   }
   std::vector<RID> rids;

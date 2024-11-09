@@ -195,12 +195,24 @@ auto BufferPoolManager::FetchPageBasic(page_id_t page_id) -> BasicPageGuard {
 auto BufferPoolManager::FetchPageRead(page_id_t page_id) -> ReadPageGuard {
   Page *fetch_page = FetchPage(page_id);
   fetch_page->RLatch();
+#ifdef WZC_
+  auto log = std::stringstream();
+  log << "--[thread " << std::this_thread::get_id() << "] | 获取page: " << fetch_page->GetPageId() << " 读 锁"
+      << std::endl;
+  LOG_DEBUG("%s", log.str().c_str());
+#endif
   return ReadPageGuard{this, fetch_page};
 }
 
 auto BufferPoolManager::FetchPageWrite(page_id_t page_id) -> WritePageGuard {
   Page *fetch_page = FetchPage(page_id);
   fetch_page->WLatch();
+#ifdef WZC_
+  auto log = std::stringstream();
+  log << "--[thread " << std::this_thread::get_id() << "] | 获取page: " << fetch_page->GetPageId() << " 写 锁"
+      << std::endl;
+  LOG_DEBUG("%s", log.str().c_str());
+#endif
   return WritePageGuard{this, fetch_page};
 }
 
