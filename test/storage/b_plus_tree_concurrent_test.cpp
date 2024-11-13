@@ -230,12 +230,12 @@ TEST(BPlusTreeConcurrentTest, DeleteTest1) {
   page_id_t page_id;
   auto header_page = bpm->NewPage(&page_id);
   // create b+ tree
-  BPlusTree<GenericKey<8>, RID, GenericComparator<8>> tree("foo_pk", header_page->GetPageId(), bpm, comparator);
+  BPlusTree<GenericKey<8>, RID, GenericComparator<8>> tree("foo_pk", header_page->GetPageId(), bpm, comparator, 3, 5);
   // sequential insert
-  std::vector<int64_t> keys = {1, 2, 3, 4, 5};
+  std::vector<int64_t> keys = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
   InsertHelper(&tree, keys);
-
-  std::vector<int64_t> remove_keys = {1, 5, 3, 4};
+  // tree.Print(bpm);
+  std::vector<int64_t> remove_keys = {4, 1, 2, 3, 6, 5};
   LaunchParallelTest(2, DeleteHelper, &tree, remove_keys);
 
   int64_t start_key = 2;
@@ -250,7 +250,7 @@ TEST(BPlusTreeConcurrentTest, DeleteTest1) {
     size = size + 1;
   }
 
-  EXPECT_EQ(size, 1);
+  EXPECT_EQ(size, 5);
 
   bpm->UnpinPage(HEADER_PAGE_ID, true);
   delete bpm;

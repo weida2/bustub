@@ -6,7 +6,7 @@
 #include "common/rid.h"
 #include "storage/index/b_plus_tree.h"
 #define WZC_Remove_
-// #define POSITIVE_CRAB
+#define POSITIVE_CRAB
 namespace bustub {
 
 INDEX_TEMPLATE_ARGUMENTS
@@ -50,20 +50,20 @@ INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::GetValue(const KeyType &key, std::vector<ValueType> *result, Transaction *txn) -> bool {
   // Declaration of context instance.
   Context ctx;
-  ReadPageGuard header_page_guard = bpm_->FetchPageRead(header_page_id_);
-  if (header_page_guard.As<BPlusTreeHeaderPage>()->root_page_id_ == INVALID_PAGE_ID) {
+  ReadPageGuard header_guard = bpm_->FetchPageRead(header_page_id_);
+  if (header_guard.As<BPlusTreeHeaderPage>()->root_page_id_ == INVALID_PAGE_ID) {
     return false;
   }
-  ReadPageGuard cur_page_guard = bpm_->FetchPageRead(header_page_guard.As<BPlusTreeHeaderPage>()->root_page_id_);
-  header_page_guard.Drop();
-  auto cur_page = cur_page_guard.As<BPlusTreePage>();
+  ReadPageGuard cur_guard = bpm_->FetchPageRead(header_guard.As<BPlusTreeHeaderPage>()->root_page_id_);
+  header_guard.Drop();
+  auto cur_page = cur_guard.As<BPlusTreePage>();
   while (!cur_page->IsLeafPage()) {
     int slot_num = FindInternal(key, cur_page);
     if (slot_num == -1) {
       return false;
     }
-    cur_page_guard = bpm_->FetchPageRead(reinterpret_cast<const InternalPage *>(cur_page)->ValueAt(slot_num));
-    cur_page = cur_page_guard.As<BPlusTreePage>();
+    cur_guard = bpm_->FetchPageRead(reinterpret_cast<const InternalPage *>(cur_page)->ValueAt(slot_num));
+    cur_page = cur_guard.As<BPlusTreePage>();
   }
   auto leaf_page = reinterpret_cast<const LeafPage *>(cur_page);
   int slot_num = FindLeaf(key, leaf_page);
@@ -139,6 +139,11 @@ auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transact
   // Declaration of context instance.
   Context ctx;
   ctx.write_set_.clear();
+#ifdef WZC_Remove_
+  auto log = std::stringstream();
+  log << "--[thread " << std::this_thread::get_id() << "] | 插入key: " << key << std::endl;
+  LOG_DEBUG("%s", log.str().c_str());
+#endif
   // 乐观螃蟹锁
 #ifdef POSITIVE_CRAB
   MappingType tmp_ps;
@@ -458,6 +463,8 @@ void BPLUSTREE_TYPE::Remove(const KeyType &key, Transaction *txn) {
   auto log = std::stringstream();
   log << "--[thread " << std::this_thread::get_id() << "] | 删除key: " << key << std::endl;
   LOG_DEBUG("%s", log.str().c_str());
+  // LOG_DEBUG("删除前树的形状为:\n");
+  // Print(bpm_);
 #endif
   WritePageGuard header_write_guard = bpm_->FetchPageWrite(header_page_id_);
   auto header_page = header_write_guard.AsMut<BPlusTreeHeaderPage>();
@@ -500,11 +507,11 @@ void BPLUSTREE_TYPE::Remove(const KeyType &key, Transaction *txn) {
 
   int slot_num = -1;
   slot_num = FindLeaf(key, leaf_page);
-  KeyType key_for_parent_locate = leaf_page->KeyAt(0);  // 用于定位parent结点已经被删除的key
   // 没找到，直接返回
   if (slot_num == -1) {
     return;
   }
+  KeyType key_for_parent_locate = leaf_page->KeyAt(0);  // 用于定位parent结点已经被删除的key
   // 先删除叶子结点的key
   for (int i = slot_num; i < leaf_page->GetSize() - 1; i++) {
     leaf_page->SetAt(i, leaf_page->KeyAt(i + 1), leaf_page->ValueAt(i + 1));
@@ -538,7 +545,7 @@ void BPLUSTREE_TYPE::Remove(const KeyType &key, Transaction *txn) {
     if (rsib_page->GetSize() > rsib_page->GetMinSize()) {
       leaf_page->IncreaseSize(1);
       leaf_page->SetAt(leaf_page->GetSize() - 1, rsib_page->KeyAt(0), rsib_page->ValueAt(0));
-      parent_page->SetKeyAt(parent_slot_num + 1, rsib_page->KeyAt(0));
+      parent_page->SetKeyAt(parent_slot_num + 1, rsib_page->KeyAt(1));
       for (int i = 0; i < rsib_page->GetSize() - 1; i++) {
         rsib_page->SetAt(i, rsib_page->KeyAt(i + 1), rsib_page->ValueAt(i + 1));
       }
@@ -596,7 +603,7 @@ void BPLUSTREE_TYPE::Remove(const KeyType &key, Transaction *txn) {
     if (rsib_page->GetSize() > rsib_page->GetMinSize()) {
       leaf_page->IncreaseSize(1);
       leaf_page->SetAt(leaf_page->GetSize() - 1, rsib_page->KeyAt(0), rsib_page->ValueAt(0));
-      parent_page->SetKeyAt(parent_slot_num + 1, rsib_page->KeyAt(0));
+      parent_page->SetKeyAt(parent_slot_num + 1, rsib_page->KeyAt(1));
       for (int i = 0; i < rsib_page->GetSize() - 1; i++) {
         rsib_page->SetAt(i, rsib_page->KeyAt(i + 1), rsib_page->ValueAt(i + 1));
       }
