@@ -5,7 +5,8 @@
 #include "common/logger.h"
 #include "common/rid.h"
 #include "storage/index/b_plus_tree.h"
-
+#define WZC_Remove_
+// #define POSITIVE_CRAB
 namespace bustub {
 
 INDEX_TEMPLATE_ARGUMENTS
@@ -17,7 +18,7 @@ BPLUSTREE_TYPE::BPlusTree(std::string name, page_id_t header_page_id, BufferPool
       leaf_max_size_(leaf_max_size),
       internal_max_size_(internal_max_size),
       header_page_id_(header_page_id) {
-#ifdef WZC_
+#ifdef WZC_Remove_
   LOG_DEBUG("leaf_max_size_: %d, internal_max_size_: %d\n", leaf_max_size_, internal_max_size_);
 #endif
   WritePageGuard guard = bpm_->FetchPageWrite(header_page_id_);
@@ -138,6 +139,69 @@ auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transact
   // Declaration of context instance.
   Context ctx;
   ctx.write_set_.clear();
+  // 乐观螃蟹锁
+#ifdef POSITIVE_CRAB
+  MappingType tmp_ps;
+  MappingType ins_ps = {key, value};
+  int slot_num_ps = -1;
+  int split_index_ps = 0;
+
+  // 先获取读锁
+  ReadPageGuard header_read_guard = bpm_->FetchPageWrite(header_page_id_);
+  auto header_page = header_read_guard.As<BPlusTreeHeaderPage>();
+  if (header_page->root_page_id_ != INVALID_PAGE_ID) {  // 如果非空
+    ReadPageGuard read_guard = bpm_->FetchPageRead(header_page->root_page_id_);
+    WritePageGuard leaf_guard;
+    auto cur_page = read_guard.As<InternalPage>();
+    if (cur_page->IsLeafPage()) {  // 只有root节点
+      read_guard.Drop();
+      leaf_guard = bpm_->FetchPageWrite(header_page->root_page_id_);
+      header_read_guard.Drop();
+    } else {
+      header_read_guard.Drop();
+      bool st{false};
+      KeyType st_key;
+      st_key.SetFromInter(1);
+      while (!st) {
+        int slot_num = FindInternal(key, cur_page);
+        if (comparator_(cur_page->KeyAt(0), st_key) != 0) {
+          read_guard = bpm_->FetchPageRead(cur_page->ValueAt(slot_num));
+          cur_page = read_guard.As<InternalPage>();
+        } else {
+          leaf_guard = bpm_->FetchPageWrite(cur_page->ValueAt(slot_num));
+          read_guard.Drop();
+          st = true;
+        }
+      }
+    }
+    auto leaf_page = leaf_guard.AsMut<LeafPage>();
+    if (FindLeaf(key, leaf_page) != -1) {
+      return false;
+    }
+    // 乐观插入，不会分裂
+    if (leaf_page->GetSize() < leaf_page->GetMaxSize()) {
+      for (int i = 0; i < leaf_page->GetSize(); i++) {
+        if (comparator_(key, leaf_page->KeyAt(i)) < 0 && slot_num_ps == -1) {
+          slot_num_ps = i;
+        }
+        if (slot_num_ps != -1) {
+          tmp_ps = {leaf_page->KeyAt(i), leaf_page->ValueAt(i)};
+          leaf_page->SetAt(i, ins_ps.first, ins_ps.second);
+          ins_ps = tmp_ps;
+        }
+      }
+      leaf_page->IncreaseSize(1);
+      leaf_page->SetAt(leaf_page->Size() - 1, ins_ps.first, ins_ps.second);
+      return true;
+    }
+    // 如果分裂,就交给悲观处理
+    leaf_guard.Drop();
+  } else {  // 空树直接交给悲观新建root
+    header_read_guard.Drop();
+  }
+#endif
+
+  // 悲观螃蟹锁
   WritePageGuard header_write_guard = bpm_->FetchPageWrite(header_page_id_);
   // 如果root_page为空，建tree,为LeafPage类型
   if (header_write_guard.As<BPlusTreeHeaderPage>()->root_page_id_ == INVALID_PAGE_ID) {
@@ -340,11 +404,11 @@ auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transact
     page_id_t root_page_id;
     BasicPageGuard tmp_pin_guard = bpm_->NewPageGuarded(&root_page_id);
     WritePageGuard root_guard = bpm_->FetchPageWrite(root_page_id);
-    tmp_pin_guard.Drop();           // 在Fetch后面释放
+    tmp_pin_guard.Drop();  // 在Fetch后面释放
 
     auto header_page = ctx.write_set_.front().AsMut<BPlusTreeHeaderPage>();
     header_page->root_page_id_ = root_page_id;
-    ctx.write_set_.front().Drop();  // 释放header结点,在获取了root_guard之后释放
+    ctx.write_set_.front().Drop();  // 释放header结点,在获取了root_guard之后释放,原因和开头一样
 
     auto root_page = root_guard.AsMut<InternalPage>();
     root_page->Init(internal_max_size_);
@@ -390,17 +454,22 @@ void BPLUSTREE_TYPE::Remove(const KeyType &key, Transaction *txn) {
   // Declaration of context instance.
   Context ctx;
   ctx.write_set_.clear();
-  WritePageGuard header_page_guard = bpm_->FetchPageWrite(header_page_id_);
-  auto header_page = header_page_guard.AsMut<BPlusTreeHeaderPage>();
+#ifdef WZC_Remove_
+  auto log = std::stringstream();
+  log << "--[thread " << std::this_thread::get_id() << "] | 删除key: " << key << std::endl;
+  LOG_DEBUG("%s", log.str().c_str());
+#endif
+  WritePageGuard header_write_guard = bpm_->FetchPageWrite(header_page_id_);
+  auto header_page = header_write_guard.AsMut<BPlusTreeHeaderPage>();
   if (header_page->root_page_id_ == INVALID_PAGE_ID) {
     return;
   }
 
-  // 先找到叶子结点，同时存储路径
+  // 先找到叶子结点，同时存储路径，加锁|释放锁
   ctx.root_page_id_ = header_page->root_page_id_;
   WritePageGuard root_page_guard = bpm_->FetchPageWrite(header_page->root_page_id_);
   auto cur_page = root_page_guard.AsMut<InternalPage>();
-  ctx.write_set_.push_back(std::move(header_page_guard));  // 加入ctx后此时page_guard还在，直到clear了才drop掉
+  ctx.write_set_.push_back(std::move(header_write_guard));  // 加入ctx后此时page_guard还在，直到clear了才drop掉
   if ((cur_page->IsLeafPage() && cur_page->GetSize() >= 2) || cur_page->GetSize() >= 3) {
     // 这里对root结点判断安全条件不大相同, 因为分裂操作root结点情况稍微不同
     // 有和没有header结点即确认root结点是否安全，对于root结点安全的判断如下
@@ -563,7 +632,7 @@ void BPLUSTREE_TYPE::Remove(const KeyType &key, Transaction *txn) {
 
   // 情况3.处理向上父节点迭代删除(内部结点)
   ctx.write_set_.push_back(std::move(parent_guard));  // 放回去判断是否需要迭代
-  while (ctx.write_set_.size() > 1) {  // 目前还没释放的结点:1.合并后的l_page(总在左边) #没啥用
+  while (ctx.write_set_.size() > 1) {  // 目前还没释放的结点:1.合并后的l_page(总在左边) #没释放也没关系没啥用
                                        // 2.在ctx里的:parent_page(cur_page),parent->parent
     WritePageGuard cur_guard = std::move(ctx.write_set_.back());
     ctx.write_set_.pop_back();
@@ -576,6 +645,7 @@ void BPLUSTREE_TYPE::Remove(const KeyType &key, Transaction *txn) {
       auto header_page = reinterpret_cast<BPlusTreeHeaderPage *>(parent_page);
       header_page->root_page_id_ = cur_page->ValueAt(0);
       cur_guard.Drop();
+      return;
     }
     parent_slot_num = -1;
     if (cur_page->GetSize() == 1) {  // 如果唯一的key被删了,就根据原来被删的key定位结点

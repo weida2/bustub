@@ -34,7 +34,7 @@ TEST(BPlusTreeTests, DeleteTest1) {
   page_id_t page_id;
   auto header_page = bpm->NewPage(&page_id);
   // create b+ tree
-  BPlusTree<GenericKey<8>, RID, GenericComparator<8>> tree("foo_pk", header_page->GetPageId(), bpm, comparator);
+  BPlusTree<GenericKey<8>, RID, GenericComparator<8>> tree("foo_pk", header_page->GetPageId(), bpm, comparator, 2, 3);
   GenericKey<8> index_key;
   RID rid;
   // create transaction
@@ -47,6 +47,8 @@ TEST(BPlusTreeTests, DeleteTest1) {
     index_key.SetFromInteger(key);
     tree.Insert(index_key, rid, transaction);
   }
+  std::cout << "打印b+树\n";
+  tree.Print(bpm);
 
   std::vector<RID> rids;
   for (auto key : keys) {
@@ -63,6 +65,7 @@ TEST(BPlusTreeTests, DeleteTest1) {
   for (auto key : remove_keys) {
     index_key.SetFromInteger(key);
     tree.Remove(index_key, transaction);
+    // tree.Print(bpm);
   }
 
   int64_t size = 0;

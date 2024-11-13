@@ -46,7 +46,7 @@ auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::KeyAt(int index) const -> KeyType {
     key = array_[index].first;
     return key;
   }
-  BUSTUB_ASSERT("index {} out of range", index);
+  // BUSTUB_ASSERT("index {} out of range", index);
   return array_[0].first;
 }
 
@@ -56,7 +56,7 @@ void B_PLUS_TREE_INTERNAL_PAGE_TYPE::SetKeyAt(int index, const KeyType &key) {
     array_[index].first = key;
     return;
   }
-  BUSTUB_ASSERT("index {} out of range", index);
+  // BUSTUB_ASSERT("index {} out of range", index);
 }
 
 /*
