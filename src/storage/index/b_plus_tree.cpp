@@ -143,27 +143,34 @@ auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transact
   if (header_write_guard.As<BPlusTreeHeaderPage>()->root_page_id_ == INVALID_PAGE_ID) {
     page_id_t root_page_id;
     BasicPageGuard tmp_pin_guard = bpm_->NewPageGuarded(&root_page_id);
+    // 这里root_guard要获取在header_page赋值之前或者drop()之前
+    // 因为如果获取在之后有可能其他线程已经获取了header_page进而获取root_page进行操作
+    WritePageGuard root_guard = bpm_->FetchPageWrite(root_page_id);
+    tmp_pin_guard.Drop();
+
     auto header_page = header_write_guard.AsMut<BPlusTreeHeaderPage>();
     header_page->root_page_id_ = root_page_id;
     header_write_guard.Drop();
-    WritePageGuard root_page_guard = bpm_->FetchPageWrite(root_page_id);
-    tmp_pin_guard.Drop();
-    auto *root_page = root_page_guard.AsMut<LeafPage>();
+
+    auto *root_page = root_guard.AsMut<LeafPage>();
     root_page->Init(leaf_max_size_);
     root_page->IncreaseSize(1);
     root_page->SetAt(0, key, value);
-    root_page_guard.Drop();
+    root_guard.Drop();
     return true;
   }
 
   auto header_page = header_write_guard.AsMut<BPlusTreeHeaderPage>();
-  WritePageGuard root_page_guard = bpm_->FetchPageWrite(header_page->root_page_id_);
-  auto cur_page = root_page_guard.As<InternalPage>();
+  WritePageGuard root_guard = bpm_->FetchPageWrite(header_page->root_page_id_);
+  auto cur_page = root_guard.As<InternalPage>();
   ctx.write_set_.push_back(std::move(header_write_guard));  // 加入header结点,判断最后分裂是否迭代到
   if (cur_page->GetSize() < cur_page->GetMaxSize()) {
+    // 判断root结点是否安全，即其size是否 < max_size
+    // 因为对于插入操作，如果size >= max_size, 再插入就会分裂，不安全
+    // 其实判断条件和下面的非root结点判断相同
     ctx.write_set_.clear();
   }
-  ctx.write_set_.push_back(std::move(root_page_guard));
+  ctx.write_set_.push_back(std::move(root_guard));
 
   while (!cur_page->IsLeafPage()) {
     WritePageGuard cur_guard;
@@ -171,11 +178,14 @@ auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transact
     cur_guard = bpm_->FetchPageWrite(cur_page->ValueAt(slot_num));
     cur_page = cur_guard.As<InternalPage>();
     if (cur_page->GetSize() < cur_page->GetMaxSize()) {
+      // 确定当前结点是否安全，来释放父节结点
+      // 在插入操作中, 内部结点或者叶子节点(都是非root结点)安全的前提是
+      // 其是不是会分裂, 也即其 size >= max_size, 这样再做插入就会分裂, 所以不安全
+      // 反之安全，即 size < max_size (没到达这个阈值)
       ctx.write_set_.clear();
     }
     ctx.write_set_.push_back(std::move(cur_guard));
   }
-  // ctx.write_set_[0].guard_.page_->page_id_
   // 找到叶子结点
   auto leaf_guard = std::move(ctx.write_set_.back());
   auto leaf_page_nomut = leaf_guard.As<LeafPage>();
@@ -254,7 +264,7 @@ auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transact
   leaf_guard.Drop();
   split_leaf_guard.Drop();
 
-  // 情况3.处理向上迭代
+  // 情况3.处理向上迭代(内部结点)
   page_id_t new_split_page_id;
   // 只要ctx.write_set大于1,说明叶子结点上一级父结点也满了,插入就会分裂
   while (ctx.write_set_.size() > 1) {
@@ -327,20 +337,22 @@ auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transact
 
   // 情况4.能到这一步说明header结点往下的root,internal各级都满了,需要新建root,InternalPage类型
   if (ctx.write_set_.front().PageId() == header_page_id_) {
-    auto header_page = ctx.write_set_.front().AsMut<BPlusTreeHeaderPage>();
     page_id_t root_page_id;
     BasicPageGuard tmp_pin_guard = bpm_->NewPageGuarded(&root_page_id);
-    header_page->root_page_id_ = root_page_id;
-    WritePageGuard root_page_guard = bpm_->FetchPageWrite(root_page_id);
+    WritePageGuard root_guard = bpm_->FetchPageWrite(root_page_id);
     tmp_pin_guard.Drop();           // 在Fetch后面释放
-    ctx.write_set_.front().Drop();  // 释放header结点
-    auto root_page = root_page_guard.AsMut<InternalPage>();
+
+    auto header_page = ctx.write_set_.front().AsMut<BPlusTreeHeaderPage>();
+    header_page->root_page_id_ = root_page_id;
+    ctx.write_set_.front().Drop();  // 释放header结点,在获取了root_guard之后释放
+
+    auto root_page = root_guard.AsMut<InternalPage>();
     root_page->Init(internal_max_size_);
     root_page->IncreaseSize(1);
     root_page->SetValueAt(0, origin_page_id);
     root_page->SetKeyAt(1, split_key);
     root_page->SetValueAt(1, split_page_id);
-    root_page_guard.Drop();
+    root_guard.Drop();
     return true;
   }
 
@@ -377,7 +389,341 @@ INDEX_TEMPLATE_ARGUMENTS
 void BPLUSTREE_TYPE::Remove(const KeyType &key, Transaction *txn) {
   // Declaration of context instance.
   Context ctx;
-  (void)ctx;
+  ctx.write_set_.clear();
+  WritePageGuard header_page_guard = bpm_->FetchPageWrite(header_page_id_);
+  auto header_page = header_page_guard.AsMut<BPlusTreeHeaderPage>();
+  if (header_page->root_page_id_ == INVALID_PAGE_ID) {
+    return;
+  }
+
+  // 先找到叶子结点，同时存储路径
+  ctx.root_page_id_ = header_page->root_page_id_;
+  WritePageGuard root_page_guard = bpm_->FetchPageWrite(header_page->root_page_id_);
+  auto cur_page = root_page_guard.AsMut<InternalPage>();
+  ctx.write_set_.push_back(std::move(header_page_guard));  // 加入ctx后此时page_guard还在，直到clear了才drop掉
+  if ((cur_page->IsLeafPage() && cur_page->GetSize() >= 2) || cur_page->GetSize() >= 3) {
+    // 这里对root结点判断安全条件不大相同, 因为分裂操作root结点情况稍微不同
+    // 有和没有header结点即确认root结点是否安全，对于root结点安全的判断如下
+    // 这里有header结点的前提是: 1.要么root结点是叶子结点, 只有一个键 key_0: 有效
+    // 2.要么当前root结点是内部结点,除了只有两个键 key_0: Invalid, key_1: 有效
+    ctx.write_set_.clear();
+  }
+  ctx.write_set_.push_back(std::move(root_page_guard));
+
+  while (!cur_page->IsLeafPage()) {
+    WritePageGuard cur_guard;
+    int slot_num = FindInternal(key, cur_page);
+    cur_guard = bpm_->FetchPageWrite(cur_page->ValueAt(slot_num));
+    cur_page = cur_guard.AsMut<InternalPage>();
+    // 确定当前结点是否安全，来释放父节结点
+    // 在删除操作中, 内部结点或者叶子节点(都是非root结点)安全的前提是
+    // 其是不是会合并(借取), 也即其 size <= min_size, 这样再做删除就会合并(借取), 所以不安全
+    // 反之安全，即 size > min_size (没达到阈值)
+    if (cur_page->GetSize() > cur_page->GetMinSize()) {
+      ctx.write_set_.clear();
+    }
+    ctx.write_set_.push_back(std::move(cur_guard));
+  }
+  // 找到了叶子结点
+  auto leaf_guard = std::move(ctx.write_set_.back());
+  auto leaf_page = leaf_guard.AsMut<LeafPage>();
+  ctx.write_set_.pop_back();
+
+  int slot_num = -1;
+  slot_num = FindLeaf(key, leaf_page);
+  KeyType key_for_parent_locate = leaf_page->KeyAt(0);  // 用于定位parent结点已经被删除的key
+  // 没找到，直接返回
+  if (slot_num == -1) {
+    return;
+  }
+  // 先删除叶子结点的key
+  for (int i = slot_num; i < leaf_page->GetSize() - 1; i++) {
+    leaf_page->SetAt(i, leaf_page->KeyAt(i + 1), leaf_page->ValueAt(i + 1));
+  }
+  leaf_page->IncreaseSize(-1);
+  // 删除之后判断
+  // 情况1.叶子结点直接删除，不用合并。或者叶子结点为根节点
+  // 这里没有leaf的parent_ctx信息，所以暂时改不了leaf对应parent位置所在的key(这种情况是删除leaf[0].key会出现)
+  if (leaf_page->GetSize() >= leaf_page->GetMinSize() || leaf_guard.PageId() == ctx.root_page_id_) {
+    if ((leaf_guard.PageId() == ctx.root_page_id_) && (leaf_page->GetSize() == 0)) {
+      leaf_guard.Drop();
+      ctx.write_set_.front().AsMut<BPlusTreeHeaderPage>()->root_page_id_ = INVALID_PAGE_ID;
+      ctx.write_set_.pop_back();
+    }
+    return;
+  }
+
+  // 情况2.处理叶子结点借或者合并(如果是合并，就需要向上迭代<情况3>)
+  auto parent_guard = std::move(ctx.write_set_.back());
+  auto parent_page = parent_guard.AsMut<InternalPage>();
+  ctx.write_set_.pop_back();
+  int parent_slot_num = -1;
+  parent_slot_num = FindInternal(key, parent_page);
+
+  WritePageGuard rsib_guard;
+  WritePageGuard lsib_guard;
+  if (parent_slot_num == 0) {  // 说明当前leaf结点位于最左边
+    rsib_guard = bpm_->FetchPageWrite(parent_page->ValueAt(parent_slot_num + 1));
+    auto rsib_page = rsib_guard.AsMut<LeafPage>();
+    // 向右借
+    if (rsib_page->GetSize() > rsib_page->GetMinSize()) {
+      leaf_page->IncreaseSize(1);
+      leaf_page->SetAt(leaf_page->GetSize() - 1, rsib_page->KeyAt(0), rsib_page->ValueAt(0));
+      parent_page->SetKeyAt(parent_slot_num + 1, rsib_page->KeyAt(0));
+      for (int i = 0; i < rsib_page->GetSize() - 1; i++) {
+        rsib_page->SetAt(i, rsib_page->KeyAt(i + 1), rsib_page->ValueAt(i + 1));
+      }
+      rsib_page->IncreaseSize(-1);
+      return;
+    }
+    // 向右合并
+    int i = leaf_page->GetSize();
+    int j = 0;
+    leaf_page->IncreaseSize(rsib_page->GetSize());
+    for (; j < rsib_page->GetSize(); j++, i++) {
+      leaf_page->SetAt(i, rsib_page->KeyAt(j), rsib_page->ValueAt(j));
+    }
+    leaf_page->SetNextPageId(rsib_page->GetNextPageId());
+    for (int i = parent_slot_num + 1; i < parent_page->GetSize() - 1; i++) {
+      parent_page->SetKeyAt(i, parent_page->KeyAt(i + 1));
+      parent_page->SetValueAt(i, parent_page->ValueAt(i + 1));
+    }
+    parent_page->IncreaseSize(-1);
+    rsib_guard.Drop();
+  } else if (parent_slot_num == parent_page->GetSize() - 1) {  // 说明当前leaf结点位于最右边
+    lsib_guard = bpm_->FetchPageWrite(parent_page->ValueAt(parent_slot_num - 1));
+    auto lsib_page = lsib_guard.AsMut<LeafPage>();
+    // 向左借
+    if (lsib_page->GetSize() > lsib_page->GetMinSize()) {
+      leaf_page->IncreaseSize(1);
+      for (int i = leaf_page->GetSize() - 1; i > 0; i--) {
+        leaf_page->SetAt(i, leaf_page->KeyAt(i - 1), leaf_page->ValueAt(i - 1));
+      }
+      leaf_page->SetAt(0, lsib_page->KeyAt(lsib_page->GetSize() - 1), lsib_page->ValueAt(lsib_page->GetSize() - 1));
+      parent_page->SetKeyAt(parent_slot_num, leaf_page->KeyAt(0));
+      lsib_page->IncreaseSize(-1);
+      return;
+    }
+    // 向左合并
+    int i = lsib_page->GetSize();
+    int j = 0;
+    lsib_page->IncreaseSize(leaf_page->GetSize());
+    for (; j < leaf_page->GetSize(); j++, i++) {
+      lsib_page->SetAt(i, leaf_page->KeyAt(j), leaf_page->ValueAt(j));
+    }
+    lsib_page->SetNextPageId(leaf_page->GetNextPageId());
+    for (int i = parent_slot_num; i < parent_page->GetSize() - 1; i++) {
+      parent_page->SetKeyAt(i, parent_page->KeyAt(i + 1));
+      parent_page->SetValueAt(i, parent_page->ValueAt(i + 1));
+    }
+    parent_page->IncreaseSize(-1);
+    leaf_guard.Drop();
+  } else {  // 说明当前leaf结点在中间
+    rsib_guard = bpm_->FetchPageWrite(parent_page->ValueAt(parent_slot_num + 1));
+    lsib_guard = bpm_->FetchPageWrite(parent_page->ValueAt(parent_slot_num - 1));
+    auto rsib_page = rsib_guard.AsMut<LeafPage>();
+    auto lsib_page = lsib_guard.AsMut<LeafPage>();
+    // 向右借
+    if (rsib_page->GetSize() > rsib_page->GetMinSize()) {
+      leaf_page->IncreaseSize(1);
+      leaf_page->SetAt(leaf_page->GetSize() - 1, rsib_page->KeyAt(0), rsib_page->ValueAt(0));
+      parent_page->SetKeyAt(parent_slot_num + 1, rsib_page->KeyAt(0));
+      for (int i = 0; i < rsib_page->GetSize() - 1; i++) {
+        rsib_page->SetAt(i, rsib_page->KeyAt(i + 1), rsib_page->ValueAt(i + 1));
+      }
+      rsib_page->IncreaseSize(-1);
+      return;
+    }
+    // 向左借
+    if (lsib_page->GetSize() > lsib_page->GetMinSize()) {
+      leaf_page->IncreaseSize(1);
+      for (int i = leaf_page->GetSize() - 1; i > 0; i--) {
+        leaf_page->SetAt(i, leaf_page->KeyAt(i - 1), leaf_page->ValueAt(i - 1));
+      }
+      leaf_page->SetAt(0, lsib_page->KeyAt(lsib_page->GetSize() - 1), lsib_page->ValueAt(lsib_page->GetSize() - 1));
+      parent_page->SetKeyAt(parent_slot_num, leaf_page->KeyAt(0));
+      lsib_page->IncreaseSize(-1);
+      return;
+    }
+    // 向右合并(这里直接优先向右合并，所以不用加入向左合并的代码了)
+    int i = leaf_page->GetSize();
+    int j = 0;
+    leaf_page->IncreaseSize(rsib_page->GetSize());
+    for (; j < rsib_page->GetSize(); j++, i++) {
+      leaf_page->SetAt(i, rsib_page->KeyAt(j), rsib_page->ValueAt(j));
+    }
+    leaf_page->SetNextPageId(rsib_page->GetNextPageId());
+    for (int i = parent_slot_num + 1; i < parent_page->GetSize() - 1; i++) {
+      parent_page->SetKeyAt(i, parent_page->KeyAt(i + 1));
+      parent_page->SetValueAt(i, parent_page->ValueAt(i + 1));
+    }
+    parent_page->IncreaseSize(-1);
+    rsib_guard.Drop();
+  }
+
+  // 情况3.处理向上父节点迭代删除(内部结点)
+  ctx.write_set_.push_back(std::move(parent_guard));  // 放回去判断是否需要迭代
+  while (ctx.write_set_.size() > 1) {  // 目前还没释放的结点:1.合并后的l_page(总在左边) #没啥用
+                                       // 2.在ctx里的:parent_page(cur_page),parent->parent
+    WritePageGuard cur_guard = std::move(ctx.write_set_.back());
+    ctx.write_set_.pop_back();
+    WritePageGuard parent_guard = std::move(ctx.write_set_.back());
+    ctx.write_set_.pop_back();
+
+    auto cur_page = cur_guard.AsMut<InternalPage>();
+    auto parent_page = parent_guard.AsMut<InternalPage>();
+    if (parent_guard.PageId() == header_page_id_) {  // 根节点修改
+      auto header_page = reinterpret_cast<BPlusTreeHeaderPage *>(parent_page);
+      header_page->root_page_id_ = cur_page->ValueAt(0);
+      cur_guard.Drop();
+    }
+    parent_slot_num = -1;
+    if (cur_page->GetSize() == 1) {  // 如果唯一的key被删了,就根据原来被删的key定位结点
+      // key_for_parent_locate = key_for_parent_locate;
+    } else {
+      key_for_parent_locate = cur_page->KeyAt(1);
+    }
+    parent_slot_num = FindInternal(key_for_parent_locate, parent_page);
+
+    // key for locate
+    key_for_parent_locate = parent_page->KeyAt(1);
+
+    WritePageGuard rsib_guard;
+    WritePageGuard lsib_guard;
+    if (parent_slot_num == 0) {  // 说明当前internal结点在最左
+      rsib_guard = bpm_->FetchPageWrite(parent_page->ValueAt(parent_slot_num + 1));
+      auto rsib_page = rsib_guard.AsMut<InternalPage>();
+      // 向右internal借
+      if (rsib_page->GetSize() > rsib_page->GetMinSize()) {
+        cur_page->IncreaseSize(1);
+        cur_page->SetKeyAt(cur_page->GetSize() - 1, parent_page->KeyAt(parent_slot_num + 1));
+        cur_page->SetValueAt(cur_page->GetSize() - 1, rsib_page->ValueAt(0));
+        // 向上提供key_1,因为内部结点key_0无效(key_0的key在其父节点对应槽位的key上),value有效
+        parent_page->SetKeyAt(parent_slot_num + 1, rsib_page->KeyAt(1));
+        for (int i = 0; i < rsib_page->GetSize() - 1; i++) {
+          if (i != 0) {
+            rsib_page->SetKeyAt(i, rsib_page->KeyAt(i + 1));
+          }
+          rsib_page->SetValueAt(i, rsib_page->ValueAt(i + 1));
+        }
+        rsib_page->IncreaseSize(-1);
+        return;
+      }
+      // 向右internal合并
+      int i = cur_page->GetSize();
+      int j = 0;
+      cur_page->IncreaseSize(rsib_page->GetSize());
+      for (; j < rsib_page->GetSize(); j++, i++) {
+        if (j == 0) {
+          cur_page->SetKeyAt(i, parent_page->KeyAt(parent_slot_num + 1));
+        } else {
+          cur_page->SetKeyAt(i, rsib_page->KeyAt(j));
+        }
+        cur_page->SetValueAt(i, rsib_page->ValueAt(j));
+      }
+      for (int i = parent_slot_num + 1; i < parent_page->GetSize() - 1; i++) {
+        parent_page->SetKeyAt(i, parent_page->KeyAt(i + 1));
+        parent_page->SetValueAt(i, parent_page->ValueAt(i + 1));
+      }
+      parent_page->IncreaseSize(-1);
+      rsib_guard.Drop();
+    } else if (parent_slot_num == parent_page->GetSize() - 1) {  // 说明当前internal结点在最右
+      lsib_guard = bpm_->FetchPageWrite(parent_page->ValueAt(parent_slot_num - 1));
+      auto lsib_page = lsib_guard.AsMut<InternalPage>();
+      // 向左internal借
+      if (lsib_page->GetSize() > lsib_page->GetMinSize()) {
+        cur_page->IncreaseSize(1);
+        for (int i = cur_page->GetSize() - 1; i >= 1; i--) {
+          if (i == 1) {
+            cur_page->SetKeyAt(i, parent_page->KeyAt(parent_slot_num));
+          } else {
+            cur_page->SetKeyAt(i, cur_page->KeyAt(i - 1));
+          }
+          cur_page->SetValueAt(i, cur_page->ValueAt(i - 1));
+        }
+        cur_page->SetValueAt(0, lsib_page->ValueAt(lsib_page->GetSize() - 1));
+        parent_page->SetKeyAt(parent_slot_num, lsib_page->KeyAt(lsib_page->GetSize() - 1));
+        lsib_page->IncreaseSize(-1);
+        return;
+      }
+      // 向左internal合并
+      int i = lsib_page->GetSize();
+      int j = 0;
+      lsib_page->IncreaseSize(cur_page->GetSize());
+      for (; j < cur_page->GetSize(); j++, i++) {
+        if (j == 0) {
+          lsib_page->SetKeyAt(i, parent_page->KeyAt(parent_slot_num));
+        } else {
+          lsib_page->SetKeyAt(i, cur_page->KeyAt(j));
+        }
+        lsib_page->SetValueAt(i, cur_page->ValueAt(j));
+      }
+      for (int i = parent_slot_num; i < parent_page->GetSize() - 1; i++) {
+        parent_page->SetKeyAt(i, parent_page->KeyAt(i + 1));
+        parent_page->SetValueAt(i, parent_page->ValueAt(i + 1));
+      }
+      parent_page->IncreaseSize(-1);
+      cur_guard.Drop();
+    } else {  // 说明当前internal在中间
+      rsib_guard = bpm_->FetchPageWrite(parent_page->ValueAt(parent_slot_num + 1));
+      lsib_guard = bpm_->FetchPageWrite(parent_page->ValueAt(parent_slot_num - 1));
+      auto rsib_page = rsib_guard.AsMut<InternalPage>();
+      auto lsib_page = lsib_guard.AsMut<InternalPage>();
+      // 向右internal借
+      if (rsib_page->GetSize() > rsib_page->GetMinSize()) {
+        cur_page->IncreaseSize(1);
+        cur_page->SetKeyAt(cur_page->GetSize() - 1, parent_page->KeyAt(parent_slot_num + 1));
+        cur_page->SetValueAt(cur_page->GetSize() - 1, rsib_page->ValueAt(0));
+        // 向上提供key_1,因为内部结点key_0无效(key_0的key在其父节点对应槽位的key上),value有效
+        parent_page->SetKeyAt(parent_slot_num + 1, rsib_page->KeyAt(1));
+        for (int i = 0; i < rsib_page->GetSize() - 1; i++) {
+          if (i != 0) {
+            rsib_page->SetKeyAt(i, rsib_page->KeyAt(i + 1));
+          }
+          rsib_page->SetValueAt(i, rsib_page->ValueAt(i + 1));
+        }
+        rsib_page->IncreaseSize(-1);
+        return;
+      }
+      // 向左internal借
+      if (lsib_page->GetSize() > lsib_page->GetMinSize()) {
+        cur_page->IncreaseSize(1);
+        for (int i = cur_page->GetSize() - 1; i >= 1; i--) {
+          if (i == 1) {
+            cur_page->SetKeyAt(i, parent_page->KeyAt(parent_slot_num));
+          } else {
+            cur_page->SetKeyAt(i, cur_page->KeyAt(i - 1));
+          }
+          cur_page->SetValueAt(i, cur_page->ValueAt(i - 1));
+        }
+        cur_page->SetValueAt(0, lsib_page->ValueAt(lsib_page->GetSize() - 1));
+        parent_page->SetKeyAt(parent_slot_num, lsib_page->KeyAt(lsib_page->GetSize() - 1));
+        lsib_page->IncreaseSize(-1);
+        return;
+      }
+      // 向右internal合并
+      int i = cur_page->GetSize();
+      int j = 0;
+      cur_page->IncreaseSize(rsib_page->GetSize());
+      for (; j < rsib_page->GetSize(); j++, i++) {
+        if (j == 0) {
+          cur_page->SetKeyAt(i, parent_page->KeyAt(parent_slot_num + 1));
+        } else {
+          cur_page->SetKeyAt(i, rsib_page->KeyAt(j));
+        }
+        cur_page->SetValueAt(i, rsib_page->ValueAt(j));
+      }
+      for (int i = parent_slot_num + 1; i < parent_page->GetSize() - 1; i++) {
+        parent_page->SetKeyAt(i, parent_page->KeyAt(i + 1));
+        parent_page->SetValueAt(i, parent_page->ValueAt(i + 1));
+      }
+      parent_page->IncreaseSize(-1);
+      rsib_guard.Drop();
+    }
+    ctx.write_set_.push_back(std::move(parent_guard));
+  }
+  ctx.write_set_.front().Drop();  // 最后drop header 或者 其他到顶的非header结点
+  // return;
 }
 
 INDEX_TEMPLATE_ARGUMENTS
