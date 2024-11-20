@@ -98,12 +98,13 @@ class TablePage {
   static_assert(sizeof(page_id_t) == 4);
 
  private:
-  using TupleInfo = std::tuple<uint16_t, uint16_t, TupleMeta>;
+  using TupleInfo = std::tuple<uint16_t, uint16_t, TupleMeta>;  // <2B, 2B, 12B>
   char page_start_[0];
-  page_id_t next_page_id_;
-  uint16_t num_tuples_;
+  page_id_t next_page_id_;  // 相当于这里到下面的都是Header的元数据了，但是tbl_info_[][3]是存在Tuple里
+                            // 其实也是元数据
+  uint16_t num_tuples_;   
   uint16_t num_deleted_tuples_;
-  TupleInfo tuple_info_[0];
+  TupleInfo tuple_info_[0];   
 
   static constexpr size_t TUPLE_INFO_SIZE = 16;
   static_assert(sizeof(TupleInfo) == TUPLE_INFO_SIZE);

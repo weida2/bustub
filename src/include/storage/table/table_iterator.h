@@ -49,7 +49,7 @@ class TableIterator {
 
  private:
   TableHeap *table_heap_;
-  RID rid_;
+  RID rid_;  // 当前记录位置(tuple)
 
   // When creating table iterator, we will record the maximum RID that we should scan.
   // Otherwise we will have dead loops when updating while scanning. (In project 4, update should be implemented as

@@ -36,7 +36,10 @@ auto TablePage::GetNextTupleOffset(const TupleMeta &meta, const Tuple &tuple) co
   } else {
     slot_end_offset = BUSTUB_PAGE_SIZE;
   }
+  // 这里每个tuple的偏移获取是从尾向前获取的
   auto tuple_offset = slot_end_offset - tuple.GetLength();
+  // offset_size代表的就是这个Page的前面存储的包括Header+Tuple_Meta的数据大小
+  // 其就是前面存储元数据区域，新插入的tuple从尾向前插入
   auto offset_size = TABLE_PAGE_HEADER_SIZE + TUPLE_INFO_SIZE * (num_tuples_ + 1);
   if (tuple_offset < offset_size) {
     return std::nullopt;

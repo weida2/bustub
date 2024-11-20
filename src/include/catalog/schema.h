@@ -101,7 +101,7 @@ class Schema {
 
  private:
   /** Fixed-length column size, i.e. the number of bytes used by one tuple. */
-  uint32_t length_;
+  uint32_t length_;  // 非字符型的其他列size总和
 
   /** All the columns in the schema, inlined and uninlined. */
   std::vector<Column> columns_;

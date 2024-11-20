@@ -5,8 +5,8 @@
 #include "common/logger.h"
 #include "common/rid.h"
 #include "storage/index/b_plus_tree.h"
-#define WZC_Remove_
-#define POSITIVE_CRAB
+// #define WZC_Remove_
+// #define POSITIVE_CRAB
 namespace bustub {
 
 INDEX_TEMPLATE_ARGUMENTS
@@ -149,33 +149,28 @@ auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transact
   MappingType tmp_ps;
   MappingType ins_ps = {key, value};
   int slot_num_ps = -1;
-  int split_index_ps = 0;
 
   // 先获取读锁
-  ReadPageGuard header_read_guard = bpm_->FetchPageWrite(header_page_id_);
-  auto header_page = header_read_guard.As<BPlusTreeHeaderPage>();
-  if (header_page->root_page_id_ != INVALID_PAGE_ID) {  // 如果非空
-    ReadPageGuard read_guard = bpm_->FetchPageRead(header_page->root_page_id_);
+  ReadPageGuard header_read_guard = bpm_->FetchPageRead(header_page_id_);
+  auto header_page_ps = header_read_guard.As<BPlusTreeHeaderPage>();
+  if (header_page_ps->root_page_id_ != INVALID_PAGE_ID) {  // 如果非空
+    ReadPageGuard read_guard = bpm_->FetchPageRead(header_page_ps->root_page_id_);
     WritePageGuard leaf_guard;
     auto cur_page = read_guard.As<InternalPage>();
     if (cur_page->IsLeafPage()) {  // 只有root节点
       read_guard.Drop();
-      leaf_guard = bpm_->FetchPageWrite(header_page->root_page_id_);
+      leaf_guard = bpm_->FetchPageWrite(header_page_ps->root_page_id_);
       header_read_guard.Drop();
     } else {
       header_read_guard.Drop();
-      bool st{false};
-      KeyType st_key;
-      st_key.SetFromInter(1);
-      while (!st) {
+      while (!cur_page->IsLeafPage()) {
         int slot_num = FindInternal(key, cur_page);
-        if (comparator_(cur_page->KeyAt(0), st_key) != 0) {
-          read_guard = bpm_->FetchPageRead(cur_page->ValueAt(slot_num));
-          cur_page = read_guard.As<InternalPage>();
-        } else {
+        read_guard = bpm_->FetchPageRead(cur_page->ValueAt(slot_num));
+        cur_page = read_guard.As<InternalPage>();
+        if (cur_page->IsLeafPage()) {
           leaf_guard = bpm_->FetchPageWrite(cur_page->ValueAt(slot_num));
           read_guard.Drop();
-          st = true;
+          break;
         }
       }
     }
@@ -196,7 +191,7 @@ auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transact
         }
       }
       leaf_page->IncreaseSize(1);
-      leaf_page->SetAt(leaf_page->Size() - 1, ins_ps.first, ins_ps.second);
+      leaf_page->SetAt(leaf_page->GetSize() - 1, ins_ps.first, ins_ps.second);
       return true;
     }
     // 如果分裂,就交给悲观处理

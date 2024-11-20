@@ -91,6 +91,7 @@ class Column {
   auto GetType() const -> TypeId { return column_type_; }
 
   /** @return true if column is inlined, false otherwise */
+  // 这里意思是说是整形的，可计算型的?
   auto IsInlined() const -> bool { return column_type_ != TypeId::VARCHAR; }
 
   /** @return a string representation of this column */
@@ -117,6 +118,7 @@ class Column {
         return 8;
       case TypeId::VARCHAR:
         // TODO(Amadou): Confirm this.
+        // 非内联== 字符型 (变长？)
         return 12;
       default: {
         UNREACHABLE("Cannot get size of invalid type");
@@ -131,10 +133,11 @@ class Column {
   TypeId column_type_;
 
   /** For a non-inlined column, this is the size of a pointer. Otherwise, the size of the fixed length column. */
+  // 对于非内联列，也即该列是string类型的，那固定长度存储的是string s的 sizeof(string)指针大小，在32位系统上是24字节
   uint32_t fixed_length_;
 
   /** For an inlined column, 0. Otherwise, the length of the variable length column. */
-  uint32_t variable_length_{0};
+  // 对于非内联列，也即该列是string类型的，那变长长度存储的是string s的s.size()大小，例如s="abcd"就是4字节
 
   /** Column offset in the tuple. */
   uint32_t column_offset_{0};

@@ -53,9 +53,10 @@ struct TableInfo {
   /** The table name */
   const std::string name_;
   /** An owning pointer to the table heap */
-  std::unique_ptr<TableHeap> table_;
+  std::unique_ptr<TableHeap> table_;  // 获取表实际数据的管理者
   /** The table OID */
   const table_oid_t oid_;
+  // 其他存表的元数据
 };
 
 /**
@@ -84,13 +85,16 @@ struct IndexInfo {
   /** The name of the index */
   std::string name_;
   /** An owning pointer to the index */
-  std::unique_ptr<Index> index_;
+  std::unique_ptr<Index> index_;  // 既存了索引的元数据,又能获取索引增删改查
+                                  // 存了IndexInfo没有的元数据有key_attrs_
+                                  // 用于key_schema和tbl_schema列之间建立联系映射
   /** The unique OID for the index */
   index_oid_t index_oid_;
   /** The name of the table on which the index is created */
   std::string table_name_;
   /** The size of the index key, in bytes */
   const size_t key_size_;
+  // 存了索引的元数据以及Index没有的元数据信息, 如index_oid, key_size_
 };
 
 /**
@@ -169,7 +173,7 @@ class Catalog {
     auto meta = tables_.find(table_oid->second);
     BUSTUB_ASSERT(meta != tables_.end(), "Broken Invariant");
 
-    return (meta->second).get();
+    return (meta->second).get();  // 取智能指针指向的对象
   }
 
   /**
@@ -325,7 +329,7 @@ class Catalog {
     std::vector<IndexInfo *> indexes{};
     indexes.reserve(table_indexes->second.size());
     for (const auto &index_meta : table_indexes->second) {
-      auto index = indexes_.find(index_meta.second);
+      auto index = indexes_.find(index_meta.second);  // index_mate=[idx_name, idx_oid]
       BUSTUB_ASSERT((index != indexes_.end()), "Broken Invariant");
       indexes.push_back(index->second.get());
     }
