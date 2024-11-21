@@ -138,6 +138,7 @@ class Column {
 
   /** For an inlined column, 0. Otherwise, the length of the variable length column. */
   // 对于非内联列，也即该列是string类型的，那变长长度存储的是string s的s.size()大小，例如s="abcd"就是4字节
+  uint32_t variable_length_{0};
 
   /** Column offset in the tuple. */
   uint32_t column_offset_{0};

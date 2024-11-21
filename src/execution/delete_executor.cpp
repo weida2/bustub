@@ -34,17 +34,18 @@ auto DeleteExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
   if (done_) {
     return false;
   }
-  uint32_t delete_rows{0};
+  int32_t delete_rows{0};
   TupleMeta meta = {INVALID_TXN_ID, INVALID_TXN_ID, false};
   while (child_executor_->Next(tuple, rid)) {
     meta.is_deleted_ = true;
     tbl_info_->table_->UpdateTupleMeta(meta, *rid);
     for (auto &index : tbl_indexes_) {
-        auto key = tuple->KeyFromTuple(tbl_info_->schema_, index->key_schema_, index->index_->GetKeyAttrs());
-        index->index_->DeleteEntry(key, *rid, exec_ctx_->GetTransaction());
+      auto key = tuple->KeyFromTuple(tbl_info_->schema_, index->key_schema_, index->index_->GetKeyAttrs());
+      index->index_->DeleteEntry(key, *rid, exec_ctx_->GetTransaction());
     }
     ++delete_rows;
   }
+
   *tuple = Tuple({Value(INTEGER, delete_rows)}, &GetOutputSchema());
   done_ = true;
   return true;

@@ -31,7 +31,7 @@ auto IndexScanExecutor::Next(Tuple *tuple, RID *rid) -> bool {
     ++it_;
     if (!meta.is_deleted_) {
       *tuple = new_tuple;
-      return true;  
+      return true;
     }
   }
   return false;

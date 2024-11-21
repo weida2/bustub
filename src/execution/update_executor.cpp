@@ -22,7 +22,7 @@ UpdateExecutor::UpdateExecutor(ExecutorContext *exec_ctx, const UpdatePlanNode *
       child_executor_(std::move(child_executor)),
       tbl_info_(exec_ctx->GetCatalog()->GetTable(plan_->table_oid_)),
       tbl_indexes_(exec_ctx->GetCatalog()->GetTableIndexes(tbl_info_->name_)) {}
-    
+
 void UpdateExecutor::Init() {
   // throw NotImplementedException("UpdateExecutor is not implemented");
   child_executor_->Init();
@@ -33,7 +33,7 @@ auto UpdateExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
   if (done_) {
     return false;
   }
-  uint32_t update_rows{0};
+  int32_t update_rows{0};
   TupleMeta meta = {INVALID_TXN_ID, INVALID_TXN_ID, false};
   int64_t first_rid;
   bool first_st{false};

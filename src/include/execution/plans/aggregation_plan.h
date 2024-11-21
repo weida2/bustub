@@ -82,11 +82,11 @@ class AggregationPlanNode : public AbstractPlanNode {
   BUSTUB_PLAN_NODE_CLONE_WITH_CHILDREN(AggregationPlanNode);
 
   /** The GROUP BY expressions */
-  std::vector<AbstractExpressionRef> group_bys_;
+  std::vector<AbstractExpressionRef> group_bys_;  // 根据哪些列来group
   /** The aggregation expressions */
-  std::vector<AbstractExpressionRef> aggregates_;
+  std::vector<AbstractExpressionRef> aggregates_;  // 要聚合的列
   /** The aggregation types */
-  std::vector<AggregationType> agg_types_;
+  std::vector<AggregationType> agg_types_;  // 要聚合的列各自的聚合类型
 
  protected:
   auto PlanNodeToString() const -> std::string override;

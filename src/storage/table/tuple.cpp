@@ -33,9 +33,10 @@ Tuple::Tuple(std::vector<Value> values, const Schema *schema) {
     }
     tuple_size += (len + sizeof(uint32_t));  // 这里为啥还要加sizeof(uint32)
                                              // 因为存的是存列内实际字符数据所在开始位置的偏移(4B)
-  }                                          // col_1:int  |  col2_2: varchar
+                                             // col_1:int  |  col2_2: varchar
                                              // [  10(4B)  ] [v_offset=<c2.ofs+4>(4B)| "abcde"(5B)]
                                              // | <- cl.ofs  | <- c2.ofs
+  }
   // 2. Allocate memory.
   data_.resize(tuple_size);
   std::fill(data_.begin(), data_.end(), 0);

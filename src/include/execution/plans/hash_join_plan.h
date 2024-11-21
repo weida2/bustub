@@ -19,7 +19,6 @@
 #include "binder/table_ref/bound_join_ref.h"
 #include "execution/expressions/abstract_expression.h"
 #include "execution/plans/abstract_plan.h"
-
 namespace bustub {
 
 /**
@@ -69,9 +68,9 @@ class HashJoinPlanNode : public AbstractPlanNode {
   BUSTUB_PLAN_NODE_CLONE_WITH_CHILDREN(HashJoinPlanNode);
 
   /** The expression to compute the left JOIN key */
-  std::vector<AbstractExpressionRef> left_key_expressions_;
+  std::vector<AbstractExpressionRef> left_key_expressions_;  // 左hash_key
   /** The expression to compute the right JOIN key */
-  std::vector<AbstractExpressionRef> right_key_expressions_;
+  std::vector<AbstractExpressionRef> right_key_expressions_;  // 右hash_key
 
   /** The join type */
   JoinType join_type_;

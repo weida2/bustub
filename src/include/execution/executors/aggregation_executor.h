@@ -70,15 +70,54 @@ class SimpleAggregationHashTable {
    * @param[out] result The output aggregate value
    * @param input The input value
    */
+  // 总共聚合的多少列为 agg_exprs_.size() [col_A | col_B(max) | col_C(sum)]
+  // input是每一行该聚合的哪些列的值,可以说是子tuple 例如 [col_B | col_C]
+  // result=ht_[group_by_key(A)].Avalue , eg.group_by col_A
+  // ht_[W_A(col_A[0])] = [ 0(c_B) | 0(c_C)]
   void CombineAggregateValues(AggregateValue *result, const AggregateValue &input) {
     for (uint32_t i = 0; i < agg_exprs_.size(); i++) {
+      // agg_type_[i]是每一行的每一列聚合的类型
       switch (agg_types_[i]) {
-        case AggregationType::CountStarAggregate:
-        case AggregationType::CountAggregate:
-        case AggregationType::SumAggregate:
-        case AggregationType::MinAggregate:
-        case AggregationType::MaxAggregate:
-          break;
+        // 该列聚合统计null,所以初始化为0
+        case AggregationType::CountStarAggregate: {
+          result->aggregates_[i] = result->aggregates_[i].Add(ValueFactory::GetIntegerValue(1));
+        } break;
+        case AggregationType::CountAggregate: {  // 不统计null的列聚合,初始化都为null
+          if (!input.aggregates_[i].IsNull()) {
+            if (result->aggregates_[i].IsNull()) {
+              result->aggregates_[i] = ValueFactory::GetIntegerValue(1);
+            } else {
+              result->aggregates_[i] = result->aggregates_[i].Add(ValueFactory::GetIntegerValue(1));
+            }
+          }
+        } break;
+        case AggregationType::SumAggregate: {
+          if (!input.aggregates_[i].IsNull()) {
+            if (result->aggregates_[i].IsNull()) {
+              result->aggregates_[i] = input.aggregates_[i];
+            } else {
+              result->aggregates_[i] = result->aggregates_[i].Add(input.aggregates_[i]);
+            }
+          }    
+        } break;
+        case AggregationType::MinAggregate: {
+          if (!input.aggregates_[i].IsNull()) {
+            if (result->aggregates_[i].IsNull()) {
+              result->aggregates_[i] = input.aggregates_[i];
+            } else {
+              result->aggregates_[i] = result->aggregates_[i].Min(input.aggregates_[i]);
+            }
+          }
+        } break;
+        case AggregationType::MaxAggregate: {
+          if (!input.aggregates_[i].IsNull()) {
+            if (result->aggregates_[i].IsNull()) {
+              result->aggregates_[i] = input.aggregates_[i];
+            } else {
+              result->aggregates_[i] = result->aggregates_[i].Max(input.aggregates_[i]);
+            }
+          }
+        } break;
       }
     }
   }
@@ -181,6 +220,7 @@ class AggregationExecutor : public AbstractExecutor {
   auto MakeAggregateKey(const Tuple *tuple) -> AggregateKey {
     std::vector<Value> keys;
     for (const auto &expr : plan_->GetGroupBys()) {
+      // 弄明白了这里expr->Evaluate(tuple, OutSchema)是匹配tuple对应expr操作的列
       keys.emplace_back(expr->Evaluate(tuple, child_executor_->GetOutputSchema()));
     }
     return {keys};
@@ -204,8 +244,11 @@ class AggregationExecutor : public AbstractExecutor {
 
   /** Simple aggregation hash table */
   // TODO(Student): Uncomment SimpleAggregationHashTable aht_;
+  SimpleAggregationHashTable aht_;
 
   /** Simple aggregation hash table iterator */
   // TODO(Student): Uncomment SimpleAggregationHashTable::Iterator aht_iterator_;
+  SimpleAggregationHashTable::Iterator aht_iterator_;
+  bool copy_with_empty{false};
 };
 }  // namespace bustub

@@ -13,12 +13,50 @@
 #pragma once
 
 #include <memory>
+#include <unordered_map>
 #include <utility>
 
 #include "execution/executor_context.h"
+#include "common/util/hash_util.h"
 #include "execution/executors/abstract_executor.h"
 #include "execution/plans/hash_join_plan.h"
 #include "storage/table/tuple.h"
+#include "type/value_factory.h"
+
+namespace bustub {
+struct JoinHashKey {
+  std::vector<Value> join_keys_;
+
+  auto operator==(const JoinHashKey &other) const -> bool {
+    for (uint32_t i = 0; i < other.join_keys_.size(); i++) {
+      if (join_keys_[i].CompareEquals(other.join_keys_[i]) != CmpBool::CmpTrue) {
+        return false;
+      }
+    }
+    return true;
+  }
+};
+
+struct JoinHashValue {
+  std::vector<Value> join_values_;
+};
+
+}  // namespace bustub
+namespace std {
+template <>
+struct hash<bustub::JoinHashKey> {
+  auto operator()(const bustub::JoinHashKey &jh_key) const -> std::size_t {
+    size_t curr_hash = 0;
+    for (const auto &key : jh_key.join_keys_) {
+      if (!key.IsNull()) {
+        curr_hash = bustub::HashUtil::CombineHashes(curr_hash, bustub::HashUtil::HashValue(&key));
+      }
+    }
+    return curr_hash;
+  }
+};
+}  // namespace std
+// 以上添加新的键值以及hash构造函数
 
 namespace bustub {
 
@@ -54,6 +92,12 @@ class HashJoinExecutor : public AbstractExecutor {
  private:
   /** The NestedLoopJoin plan node to be executed. */
   const HashJoinPlanNode *plan_;
+
+  std::unique_ptr<AbstractExecutor> left_executor_;
+  std::unique_ptr<AbstractExecutor> right_executor_;
+  std::unordered_multimap<JoinHashKey, JoinHashValue> jht_{};
+  std::vector<Tuple> tuples_;  // 返回符合条件的tuple
+  std::vector<Tuple>::iterator tuples_it_;
 };
 
 }  // namespace bustub

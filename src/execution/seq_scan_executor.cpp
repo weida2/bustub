@@ -16,9 +16,9 @@ namespace bustub {
 
 SeqScanExecutor::SeqScanExecutor(ExecutorContext *exec_ctx, const SeqScanPlanNode *plan)
     : AbstractExecutor(exec_ctx),
-     plan_(plan),
-     tbl_info_(exec_ctx->GetCatalog()->GetTable(plan_->table_oid_)),
-     tbl_it_(std::make_unique<TableIterator>(tbl_info_->table_->MakeIterator())) {}
+      plan_(plan),
+      tbl_info_(exec_ctx->GetCatalog()->GetTable(plan_->table_oid_)),
+      tbl_it_(std::make_unique<TableIterator>(tbl_info_->table_->MakeIterator())) {}
 
 void SeqScanExecutor::Init() {
   // throw NotImplementedException("SeqScanExecutor is not implemented");
@@ -32,10 +32,10 @@ auto SeqScanExecutor::Next(Tuple *tuple, RID *rid) -> bool {
     ++(*tbl_it_);
     if (!meta.is_deleted_) {
       if (plan_->filter_predicate_ != nullptr) {
-          auto value = plan_->filter_predicate_->Evaluate(&new_tuple, GetOutputSchema());
-          if (value.IsNull() || !value.GetAs<bool>()) {
-            continue;
-          }
+        auto value = plan_->filter_predicate_->Evaluate(&new_tuple, GetOutputSchema());
+        if (value.IsNull() || !value.GetAs<bool>()) {
+          continue;
+        }
       }
       *tuple = new_tuple;
       return true;
