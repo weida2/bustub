@@ -34,15 +34,15 @@ void AggregationExecutor::Init() {
     aht_.InsertCombine(MakeAggregateKey(&tuple), MakeAggregateValue(&tuple));
   }
   aht_iterator_ = aht_.Begin();
-  copy_with_empty = false;
+  copy_with_empty_ = false;
 }
 
 // 之后就遍历聚合后的表
 auto AggregationExecutor::Next(Tuple *tuple, RID *rid) -> bool {
   // 处理没有group和空表的情况
-  if (aht_.Begin() == aht_.End() && !copy_with_empty && plan_->group_bys_.empty()) {
+  if (aht_.Begin() == aht_.End() && !copy_with_empty_ && plan_->group_bys_.empty()) {
     *tuple = Tuple(aht_.GenerateInitialAggregateValue().aggregates_, &GetOutputSchema());  // return null
-    copy_with_empty = true;
+    copy_with_empty_ = true;
     return true;
   }
   while (aht_iterator_ != aht_.End()) {

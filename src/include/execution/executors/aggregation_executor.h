@@ -98,7 +98,7 @@ class SimpleAggregationHashTable {
             } else {
               result->aggregates_[i] = result->aggregates_[i].Add(input.aggregates_[i]);
             }
-          }    
+          }
         } break;
         case AggregationType::MinAggregate: {
           if (!input.aggregates_[i].IsNull()) {
@@ -249,6 +249,6 @@ class AggregationExecutor : public AbstractExecutor {
   /** Simple aggregation hash table iterator */
   // TODO(Student): Uncomment SimpleAggregationHashTable::Iterator aht_iterator_;
   SimpleAggregationHashTable::Iterator aht_iterator_;
-  bool copy_with_empty{false};
+  bool copy_with_empty_{false};
 };
 }  // namespace bustub

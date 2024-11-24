@@ -15,14 +15,14 @@
 #include <memory>
 #include <unordered_map>
 #include <utility>
+#include <vector>
 
-#include "execution/executor_context.h"
 #include "common/util/hash_util.h"
+#include "execution/executor_context.h"
 #include "execution/executors/abstract_executor.h"
 #include "execution/plans/hash_join_plan.h"
 #include "storage/table/tuple.h"
 #include "type/value_factory.h"
-
 namespace bustub {
 struct JoinHashKey {
   std::vector<Value> join_keys_;

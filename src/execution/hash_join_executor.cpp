@@ -12,15 +12,14 @@
 
 #include "execution/executors/hash_join_executor.h"
 
-
 namespace bustub {
 
 HashJoinExecutor::HashJoinExecutor(ExecutorContext *exec_ctx, const HashJoinPlanNode *plan,
                                    std::unique_ptr<AbstractExecutor> &&left_child,
                                    std::unique_ptr<AbstractExecutor> &&right_child)
-    : AbstractExecutor(exec_ctx), 
-      plan_(plan), 
-      left_executor_(std::move(left_child)), 
+    : AbstractExecutor(exec_ctx),
+      plan_(plan),
+      left_executor_(std::move(left_child)),
       right_executor_(std::move(right_child)) {
   if (!(plan->GetJoinType() == JoinType::LEFT || plan->GetJoinType() == JoinType::INNER)) {
     // Note for 2023 Spring: You ONLY need to implement left join and inner join.
@@ -38,19 +37,19 @@ void HashJoinExecutor::Init() {
   Tuple tuple{};
   RID rid{};
   // 1.构建哈希右表
-  // HashJoin { type=Inner, left_key=[#0.0, #0.1], right_key=[#0.0, #0.2] } 
-  // SeqScan { table=test_1 }                                             
-  // SeqScan { table=test_2 } 
+  // HashJoin { type=Inner, left_key=[#0.0, #0.1], right_key=[#0.0, #0.2] }
+  // SeqScan { table=test_1 }
+  // SeqScan { table=test_2 }
   while (right_executor_->Next(&tuple, &rid)) {
     JoinHashKey r_keys{};
     for (auto &exp : plan_->right_key_expressions_) {
-      r_keys.join_keys_.push_back(exp->Evaluate(&tuple, right_executor_->GetOutputSchema()));
+      r_keys.join_keys_.emplace_back(exp->Evaluate(&tuple, right_executor_->GetOutputSchema()));
     }
     JoinHashValue r_values{};
-    uint32_t r_col_size_ = right_executor_->GetOutputSchema().GetColumns().size();
-    r_values.join_values_.reserve(r_col_size_);
-    for (uint32_t i = 0; i < r_col_size_; i++) {
-      r_values.join_values_.push_back(tuple.GetValue(&right_executor_->GetOutputSchema(), i));
+    uint32_t r_col_size = right_executor_->GetOutputSchema().GetColumns().size();
+    r_values.join_values_.reserve(r_col_size);
+    for (uint32_t i = 0; i < r_col_size; i++) {
+      r_values.join_values_.emplace_back(tuple.GetValue(&right_executor_->GetOutputSchema(), i));
     }
     jht_.insert({r_keys, r_values});
   }
@@ -58,35 +57,34 @@ void HashJoinExecutor::Init() {
   while (left_executor_->Next(&tuple, &rid)) {
     JoinHashKey l_keys{};
     for (auto &exp : plan_->left_key_expressions_) {
-      l_keys.join_keys_.push_back(exp->Evaluate(&tuple, left_executor_->GetOutputSchema()));
+      l_keys.join_keys_.emplace_back(exp->Evaluate(&tuple, left_executor_->GetOutputSchema()));
     }
     if (jht_.count(l_keys) != 0) {
       auto range = jht_.equal_range(l_keys);  // 因为key值不一定唯一,有多个key需要都遍历加入其值
       for (auto it = range.first; it != range.second; ++it) {
         std::vector<Value> values{};
-        uint32_t l_col_size_ = left_executor_->GetOutputSchema().GetColumns().size();
+        uint32_t l_col_size = left_executor_->GetOutputSchema().GetColumns().size();
         values.reserve(GetOutputSchema().GetColumns().size());
-        for (uint32_t i = 0; i < l_col_size_; i++) {
-          values.push_back(tuple.GetValue(&left_executor_->GetOutputSchema(), i));
+        for (uint32_t i = 0; i < l_col_size; i++) {
+          values.emplace_back(tuple.GetValue(&left_executor_->GetOutputSchema(), i));
         }
         for (auto const &value : it->second.join_values_) {
-          values.push_back(value);
+          values.emplace_back(value);
         }
-        tuples_.push_back(Tuple{values, &GetOutputSchema()});
+        tuples_.emplace_back(Tuple{values, &GetOutputSchema()});
       }
     } else if (jht_.count(l_keys) == 0 && plan_->join_type_ == JoinType::LEFT) {
       std::vector<Value> values{};
-      uint32_t l_col_size_ = left_executor_->GetOutputSchema().GetColumns().size();
-      uint32_t r_col_size_ = right_executor_->GetOutputSchema().GetColumns().size();
+      uint32_t l_col_size = left_executor_->GetOutputSchema().GetColumns().size();
+      uint32_t r_col_size = right_executor_->GetOutputSchema().GetColumns().size();
       values.reserve(GetOutputSchema().GetColumns().size());
-      for (uint32_t i = 0; i < l_col_size_; i++) {
-        values.push_back(tuple.GetValue(&left_executor_->GetOutputSchema(), i));
+      for (uint32_t i = 0; i < l_col_size; i++) {
+        values.emplace_back(tuple.GetValue(&left_executor_->GetOutputSchema(), i));
       }
-      for (uint32_t i = 0; i < r_col_size_; i++) {
-        values.push_back(
-            ValueFactory::GetNullValueByType(right_executor_->GetOutputSchema().GetColumn(i).GetType()));
+      for (uint32_t i = 0; i < r_col_size; i++) {
+        values.push_back(ValueFactory::GetNullValueByType(right_executor_->GetOutputSchema().GetColumn(i).GetType()));
       }
-      tuples_.push_back(Tuple{values, &GetOutputSchema()});
+      tuples_.emplace_back(Tuple{values, &GetOutputSchema()});
     }
   }
   tuples_it_ = tuples_.begin();

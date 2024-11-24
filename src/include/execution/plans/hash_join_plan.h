@@ -56,6 +56,7 @@ class HashJoinPlanNode : public AbstractPlanNode {
     return GetChildAt(0);
   }
 
+  // 哈希算子至少有两个结点
   /** @return The right plan node of the hash join */
   auto GetRightPlan() const -> AbstractPlanNodeRef {
     BUSTUB_ASSERT(GetChildren().size() == 2, "Hash joins should have exactly two children plans.");

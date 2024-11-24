@@ -39,6 +39,7 @@ class LimitPlanNode : public AbstractPlanNode {
   /** @return The limit */
   auto GetLimit() const -> size_t { return limit_; }
 
+  // limit算子至少有一个结点
   /** @return The child plan node */
   auto GetChildPlan() const -> AbstractPlanNodeRef {
     BUSTUB_ASSERT(GetChildren().size() == 1, "Limit should have at most one child plan.");

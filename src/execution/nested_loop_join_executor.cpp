@@ -21,7 +21,7 @@ namespace bustub {
 NestedLoopJoinExecutor::NestedLoopJoinExecutor(ExecutorContext *exec_ctx, const NestedLoopJoinPlanNode *plan,
                                                std::unique_ptr<AbstractExecutor> &&left_executor,
                                                std::unique_ptr<AbstractExecutor> &&right_executor)
-    : AbstractExecutor(exec_ctx), 
+    : AbstractExecutor(exec_ctx),
       plan_(plan),
       left_executor_(std::move(left_executor)),
       right_executor_(std::move(right_executor)),
@@ -53,8 +53,8 @@ auto NestedLoopJoinExecutor::Next(Tuple *tuple, RID *rid) -> bool {
       right_executor_->Init();
     }
     // 开始进行右表匹配
-    // NestedLoopJoin { type=Inner, predicate=((#0.0=#1.0)and(#0.1=#1.2)) } 
-    // SeqScan { table=test_1 }                                           
+    // NestedLoopJoin { type=Inner, predicate=((#0.0=#1.0)and(#0.1=#1.2)) }
+    // SeqScan { table=test_1 }
     // SeqScan { table=test_2 }
     while (right_executor_->Next(tuple, rid)) {
       Tuple right_tuple = *tuple;
@@ -86,7 +86,7 @@ auto NestedLoopJoinExecutor::Next(Tuple *tuple, RID *rid) -> bool {
       *tuple = Tuple(values, &GetOutputSchema());
       match_ = false;
       outer_finish_ = true;
-      return true;        
+      return true;
     }
     // 到这说明这一次outer的tuple和inner的所有tuple匹配完了
     match_ = false;

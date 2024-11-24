@@ -43,6 +43,7 @@ class SortPlanNode : public AbstractPlanNode {
   /** @return The type of the plan node */
   auto GetType() const -> PlanType override { return PlanType::Sort; }
 
+  // 排序算子至少有一个结点
   /** @return The child plan node */
   auto GetChildPlan() const -> AbstractPlanNodeRef {
     BUSTUB_ASSERT(GetChildren().size() == 1, "Sort should have exactly one child plan.");
@@ -54,7 +55,7 @@ class SortPlanNode : public AbstractPlanNode {
 
   BUSTUB_PLAN_NODE_CLONE_WITH_CHILDREN(SortPlanNode);
 
-  std::vector<std::pair<OrderByType, AbstractExpressionRef>> order_bys_;
+  std::vector<std::pair<OrderByType, AbstractExpressionRef>> order_bys_;  // 抽象表达式做列比较的
 
  protected:
   auto PlanNodeToString() const -> std::string override;
