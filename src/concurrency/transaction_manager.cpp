@@ -31,6 +31,7 @@ void TransactionManager::Commit(Transaction *txn) {
 
 void TransactionManager::Abort(Transaction *txn) {
   /* TODO: revert all the changes in write set */
+  // 回滚
 
   ReleaseLocks(txn);
 

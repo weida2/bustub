@@ -67,7 +67,7 @@ class LockManager {
     /** List of lock requests for the same resource (table or row) */
     std::list<std::shared_ptr<LockRequest>> request_queue_;
     /** For notifying blocked transactions on this rid */
-    std::condition_variable cv_;
+    std::condition_variable cv_;  // 线程通信原语
     /** txn_id of an upgrading transaction (if any) */
     txn_id_t upgrading_ = INVALID_TXN_ID;
     /** coordination */
@@ -91,7 +91,7 @@ class LockManager {
     enable_cycle_detection_ = false;
 
     if (cycle_detection_thread_ != nullptr) {
-      cycle_detection_thread_->join();
+      cycle_detection_thread_->join();  // 等待死锁检测线程完成
       delete cycle_detection_thread_;
     }
   }
@@ -162,6 +162,7 @@ class LockManager {
    *    A lock request being upgraded should be prioritized over other waiting lock requests on the same resource.
    *
    *    While upgrading, only the following transitions should be allowed:
+   *        IS, S == IX, SIX, X
    *        IS -> [S, X, IX, SIX]
    *        S -> [X, SIX]
    *        IX -> [X, SIX]
@@ -316,12 +317,21 @@ class LockManager {
 
   TransactionManager *txn_manager_;
 
+  /* helper-function */
+  void ThrowAbort(Transaction *txn, AbortReason abort_reason);
+  void DeleteTxnLockTable(Transaction *txn, LockMode lock_mode, const table_oid_t &oid);
+  void InsertTxnLockTable(Transaction *txn, LockMode lock_mode, const table_oid_t &oid);
+  void DeleteTxnLockRow(Transaction *txn, LockMode lock_mode, const table_oid_t &oid, const RID &rid);
+  void InsertTxnLockRow(Transaction *txn, LockMode lock_mode, const table_oid_t &oid, const RID &rid);
+  auto AreLocksCompatible(LockMode l1, LockMode l2) -> bool;
+  auto GrantAllowed(Transaction *txn, const std::shared_ptr<LockRequestQueue> &lock_request_queue, LockMode lock_mode)
+      -> bool;
+
  private:
   /** Spring 2023 */
   /* You are allowed to modify all functions below. */
   auto UpgradeLockTable(Transaction *txn, LockMode lock_mode, const table_oid_t &oid) -> bool;
   auto UpgradeLockRow(Transaction *txn, LockMode lock_mode, const table_oid_t &oid, const RID &rid) -> bool;
-  auto AreLocksCompatible(LockMode l1, LockMode l2) -> bool;
   auto CanTxnTakeLock(Transaction *txn, LockMode lock_mode) -> bool;
   void GrantNewLocksIfPossible(LockRequestQueue *lock_request_queue);
   auto CanLockUpgrade(LockMode curr_lock_mode, LockMode requested_lock_mode) -> bool;

@@ -340,8 +340,6 @@ class Transaction {
   /** The LSN of the last record written by the transaction. */
   lsn_t prev_lsn_;
 
-  std::mutex latch_;
-
   /** Concurrent index: the pages that were latched during index operation. */
   std::shared_ptr<std::deque<Page *>> page_set_;
   /** Concurrent index: the page IDs that were deleted during index operation.*/
@@ -357,6 +355,8 @@ class Transaction {
   /** LockManager: the set of row locks held by this transaction. */
   std::shared_ptr<std::unordered_map<table_oid_t, std::unordered_set<RID>>> s_row_lock_set_;
   std::shared_ptr<std::unordered_map<table_oid_t, std::unordered_set<RID>>> x_row_lock_set_;
+
+  std::mutex latch_;
 };
 
 }  // namespace bustub
