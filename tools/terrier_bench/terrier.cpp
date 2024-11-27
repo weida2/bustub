@@ -20,7 +20,6 @@
 #include "terrier_bench_config.h"
 
 #include <sys/time.h>
-
 #define TERRIER_BENCH_ENABLE_INDEX
 
 auto ClockMs() -> uint64_t {
@@ -245,7 +244,6 @@ auto main(int argc, char **argv) -> int {
 
   total_metrics.Begin();
 
-  // DELETE FROM nft WHERE id = {}  // INSERT INTO nft VALUES ({}, {})
   for (size_t thread_id = 0; thread_id < BUSTUB_TERRIER_THREAD; thread_id++) {
     threads.emplace_back(
         std::thread([verbose, thread_id, &bustub, enable_update, duration_ms, &total_metrics, bustub_nft_num] {
@@ -296,8 +294,6 @@ auto main(int argc, char **argv) -> int {
               auto txn = bustub->txn_manager_->Begin(nullptr, bustub::IsolationLevel::REPEATABLE_READ);
 
               std::string query = fmt::format("DELETE FROM nft WHERE id = {}", nft_id);
-              std::cout << "DELETE FROM nft WHERE id = " << nft_id << "  " << txn->GetTransactionId() << std::endl;
-
               if (!bustub->ExecuteSqlTxn(query, writer, txn)) {
                 txn_success = false;
               }
@@ -308,14 +304,11 @@ auto main(int argc, char **argv) -> int {
               }
 
               if (!txn_success) {
-                std::cout << "DELETE FROM nft WHERE id = " << nft_id << "  FAIL" << "  " << txn->GetTransactionId() << std::endl;
                 bustub->txn_manager_->Abort(txn);
                 metrics.TxnAborted();
                 delete txn;
               } else {
-                std::cout << "DELETE FROM nft WHERE id = " << nft_id << "  OK" << "  " << txn->GetTransactionId() << std::endl;
                 query = fmt::format("INSERT INTO nft VALUES ({}, {})", nft_id, terrier_id);
-                std::cout << "INSERT INTO nft VALUES = " << nft_id << ", " << terrier_id << "  " << txn->GetTransactionId() << std::endl;
                 if (!bustub->ExecuteSqlTxn(query, writer, txn)) {
                   txn_success = false;
                 }
@@ -326,11 +319,9 @@ auto main(int argc, char **argv) -> int {
                 }
 
                 if (!txn_success) {
-                  std::cout << "INSERT INTO nft VALUES = " << nft_id << ", " << terrier_id << "  FAIL" << "  " << txn->GetTransactionId() << std::endl;
                   bustub->txn_manager_->Abort(txn);
                   metrics.TxnAborted();
                 } else {
-                  std::cout << "INSERT INTO nft VALUES = " << nft_id << ", " << terrier_id << "  OK" << "  " << txn->GetTransactionId() << std::endl;
                   CheckTableLock(txn);
                   bustub->txn_manager_->Commit(txn);
                   metrics.TxnCommitted();
@@ -350,7 +341,6 @@ auto main(int argc, char **argv) -> int {
         }));
   }
 
-  // SELECT count(*) FROM nft WHERE terrier = {}
   for (size_t thread_id = 0; thread_id < BUSTUB_TERRIER_THREAD; thread_id++) {
     threads.emplace_back(std::thread([thread_id, &bustub, duration_ms, &total_metrics] {
       std::random_device r;
@@ -369,18 +359,15 @@ auto main(int argc, char **argv) -> int {
         bool txn_success = true;
 
         std::string query = fmt::format("SELECT count(*) FROM nft WHERE terrier = {}", terrier_id);
-        std::cout << "SELECT count(*) FROM nft WHERE terrier = " << terrier_id << "  " << txn->GetTransactionId() << std::endl;
         if (!bustub->ExecuteSqlTxn(query, writer, txn)) {
           txn_success = false;
         }
 
         if (txn_success) {
-          std::cout << "SELECT count(*) FROM nft WHERE terrier = " << terrier_id << "  OK" << "  " << txn->GetTransactionId() << std::endl;
           CheckTableLock(txn);
           bustub->txn_manager_->Commit(txn);
           metrics.TxnCommitted();
         } else {
-          std::cout << "SELECT count(*) FROM nft WHERE terrier = " << terrier_id << "  FAIL" << "  " << txn->GetTransactionId() << std::endl;
           bustub->txn_manager_->Abort(txn);
           metrics.TxnAborted();
         }
@@ -393,7 +380,6 @@ auto main(int argc, char **argv) -> int {
     }));
   }
 
-  // SELECT * FROM nft / REPEAT
   threads.emplace_back(std::thread([&bustub, duration_ms, &total_metrics, bustub_nft_num] {
     std::random_device r;
     std::default_random_engine gen(r());
@@ -410,13 +396,11 @@ auto main(int argc, char **argv) -> int {
       bool txn_success = true;
 
       std::string query = "SELECT * FROM nft";
-      std::cout << "SELECT * FROM nft" << "  " << txn->GetTransactionId() << std::endl;
       if (!bustub->ExecuteSqlTxn(query, writer, txn)) {
         txn_success = false;
       }
 
       if (txn_success) {
-        std::cout << "SELECT * FROM nft" << "   OK" << "  " << txn->GetTransactionId() << std::endl;
         auto all_nfts = bustub::StringUtil::Split(ss.str(), '\n');
         auto all_nfts_integer = std::vector<int>();
         for (auto &nft : all_nfts) {
@@ -452,13 +436,11 @@ auto main(int argc, char **argv) -> int {
 
         std::stringstream ss;
         auto writer = bustub::SimpleStreamWriter(ss, true);
-        std::cout << "(repeat) SELECT * FROM nft" << "  " << txn->GetTransactionId() << std::endl;
         if (!bustub->ExecuteSqlTxn(query, writer, txn)) {
           txn_success = false;
         }
 
         if (txn_success) {
-          std::cout << "(repeat) SELECT * FROM nft" << "  OK" << "  " << txn->GetTransactionId() << std::endl;
           if (ss.str() != prev_result) {
             fmt::print("ERROR: non repeatable read!\n");
             if (bustub_nft_num <= 100) {
@@ -471,12 +453,10 @@ auto main(int argc, char **argv) -> int {
           bustub->txn_manager_->Commit(txn);
           metrics.TxnCommitted();
         } else {
-          std::cout << "(repeat) SELECT * FROM nft" << "  FAIL" << "  " << txn->GetTransactionId() << std::endl;
           bustub->txn_manager_->Abort(txn);
           metrics.TxnAborted();
         }
       } else {
-        std::cout << "SELECT * FROM nft" << "   FAIL" << "  " << txn->GetTransactionId() << std::endl;
         bustub->txn_manager_->Abort(txn);
         metrics.TxnAborted();
       }
