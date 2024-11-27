@@ -67,7 +67,8 @@ auto InsertExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
       index->index_->InsertEntry(key, new_tuple_rid.value(), exec_ctx_->GetTransaction());
       // 将记录插入表的索引的写记录队列
       // 索引操作的记录就记录它的 key-value (index_key, rid)
-      auto index_write_record = IndexWriteRecord(*rid, tbl_info_->oid_, WType::INSERT, *tuple, index->index_oid_, exec_ctx_->GetCatalog());
+      auto index_write_record =
+          IndexWriteRecord(*rid, tbl_info_->oid_, WType::INSERT, *tuple, index->index_oid_, exec_ctx_->GetCatalog());
       exec_ctx_->GetTransaction()->AppendIndexWriteRecord(index_write_record);
     }
     ++insert_rows;

@@ -40,7 +40,7 @@ void SeqScanExecutor::Init() {
       break;
   }
 #endif
-  tbl_it_ = std::make_unique<TableIterator>(tbl_info_->table_->MakeIterator());
+  tbl_it_ = std::make_unique<TableIterator>(tbl_info_->table_->MakeEagerIterator());
 }
 
 auto SeqScanExecutor::Next(Tuple *tuple, RID *rid) -> bool {
@@ -68,8 +68,8 @@ auto SeqScanExecutor::Next(Tuple *tuple, RID *rid) -> bool {
         exec_ctx_->GetLockManager()->LockTable(exec_ctx_->GetTransaction(), LockManager::LockMode::INTENTION_EXCLUSIVE,
                                                tbl_info_->oid_);
         exec_ctx_->GetLockManager()->LockRow(exec_ctx_->GetTransaction(), LockManager::LockMode::EXCLUSIVE,
-                                               tbl_info_->oid_, *rid);
-      } catch(TransactionAbortException& e) {
+                                             tbl_info_->oid_, *rid);
+      } catch (TransactionAbortException &e) {
         throw ExecutionException(e.GetInfo());
       }
     }
@@ -110,8 +110,8 @@ auto SeqScanExecutor::Next(Tuple *tuple, RID *rid) -> bool {
     if (exec_ctx_->GetTransaction()->GetIsolationLevel() == IsolationLevel::READ_COMMITTED) {
       exec_ctx_->GetLockManager()->UnlockRow(exec_ctx_->GetTransaction(), tbl_info_->oid_, *rid, true);
     }
-    return false; 
   }
+  return false;
 
 #else
   while (!tbl_it_->IsEnd()) {

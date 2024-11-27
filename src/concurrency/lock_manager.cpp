@@ -525,20 +525,21 @@ void LockManager::RemoveEdge(txn_id_t t1, txn_id_t t2) {
   }
 }
 
-auto LockManager::dfs(std::vector<txn_id_t> visited, std::vector<txn_id_t> rely_tids, txn_id_t *abort_txn_id)
-    -> bool {
+auto LockManager::Dfs(std::vector<txn_id_t> visited, std::vector<txn_id_t> rely_tids, txn_id_t *abort_txn_id) -> bool {
   // if (rely_tids.empty()) return false;
   std::sort(rely_tids.begin(), rely_tids.end());
   for (const auto &tid : rely_tids) {
+    // 即有环
     if (std::find(visited.begin(), visited.end(), tid) != visited.end()) {
+      *abort_txn_id = tid;
       for (auto yougest_tid : visited) {
         *abort_txn_id = std::max(*abort_txn_id, yougest_tid);  // 最年轻的tid,即后来到来的
-        return true;
       }
+      return true;
     }
     visited.push_back(tid);
     const auto &this_rely_tids = waits_for_[tid];
-    if (dfs(visited, this_rely_tids, abort_txn_id)) {
+    if (Dfs(visited, this_rely_tids, abort_txn_id)) {
       return true;
     }
     visited.pop_back();
@@ -549,14 +550,14 @@ auto LockManager::dfs(std::vector<txn_id_t> visited, std::vector<txn_id_t> rely_
 auto LockManager::HasCycle(txn_id_t *txn_id) -> bool {
   waits_for_latch_.lock();
   std::vector<txn_id_t> visited{};  // 标记数组
-  std::vector<txn_id_t> rely_tids{}; 
+  std::vector<txn_id_t> rely_tids{};
   for (const auto &pair : waits_for_) {
     txn_id_t st = pair.first;
     if (!pair.second.empty()) {
       rely_tids.push_back(st);
     }
   }
-  if (dfs(visited, rely_tids, txn_id)) {
+  if (Dfs(visited, rely_tids, txn_id)) {
     waits_for_latch_.unlock();
     return true;
   }
@@ -577,10 +578,10 @@ void LockManager::RunCycleDetection() {
       table_lock_map_latch_.lock();
       for (const auto &table : table_lock_map_) {
         auto ti_lock_request_queue = table.second;
-        std::vector<txn_id_t> st_s;
-        std::vector<txn_id_t> ed_s;
+        std::vector<txn_id_t> st_s{};
+        std::vector<txn_id_t> ed_s{};
         ti_lock_request_queue->latch_.lock();
-        for (const auto &lock_request_i: ti_lock_request_queue->request_queue_) {
+        for (const auto &lock_request_i : ti_lock_request_queue->request_queue_) {
           auto txn = txn_manager_->GetTransaction(lock_request_i->txn_id_);
           if (txn->GetState() != TransactionState::ABORTED) {
             if (!lock_request_i->granted_) {
@@ -604,10 +605,10 @@ void LockManager::RunCycleDetection() {
       row_lock_map_latch_.lock();
       for (const auto &row : row_lock_map_) {
         auto ri_lock_request_queue = row.second;
-        std::vector<txn_id_t> st_s;
-        std::vector<txn_id_t> ed_s;
+        std::vector<txn_id_t> st_s{};
+        std::vector<txn_id_t> ed_s{};
         ri_lock_request_queue->latch_.lock();
-        for (const auto &lock_request_i: ri_lock_request_queue->request_queue_) {
+        for (const auto &lock_request_i : ri_lock_request_queue->request_queue_) {
           auto txn = txn_manager_->GetTransaction(lock_request_i->txn_id_);
           if (txn->GetState() != TransactionState::ABORTED) {
             if (!lock_request_i->granted_) {
@@ -620,9 +621,9 @@ void LockManager::RunCycleDetection() {
         ri_lock_request_queue->latch_.unlock();
         for (auto st : st_s) {
           for (auto ed : ed_s) {
-            waits_for_latch_.lock();
+            // waits_for_latch_.lock();
             AddEdge(st, ed);
-            waits_for_latch_.unlock();
+            // waits_for_latch_.unlock();
           }
         }
       }
@@ -648,7 +649,7 @@ auto LockManager::GetEdgeList() -> std::vector<std::pair<txn_id_t, txn_id_t>> {
   for (const auto &pair : waits_for_) {
     txn_id_t st = pair.first;
     for (auto ed : pair.second) {
-      edges.push_back(std::make_pair(st, ed));
+      edges.emplace_back(std::make_pair(st, ed));
     }
   }
   return edges;
