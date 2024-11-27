@@ -30,6 +30,9 @@ void UpdateExecutor::Init() {
 }
 
 auto UpdateExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
+#ifdef PRO_4_OPT
+  // TODO 就地更新
+#endif
   if (done_) {
     return false;
   }

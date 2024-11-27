@@ -14,6 +14,8 @@ auto Optimizer::OptimizeCustom(const AbstractPlanNodeRef &plan) -> AbstractPlanN
   p = OptimizeNLJAsHashJoin(p);       // nlj -> hash_join
   p = OptimizeOrderByAsIndexScan(p);  // order-by -> index_scan
   p = OptimizeSortLimitAsTopN(p);     // sort + limit -> topn
+  p = OptimizeMergeFilterScan(p);     // filter+seq_scan -> seq_scan(filter)
+                                      // 谓词下推到scan
   return p;
 }
 

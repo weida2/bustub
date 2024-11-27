@@ -19,7 +19,7 @@
 #include "execution/executors/abstract_executor.h"
 #include "execution/plans/seq_scan_plan.h"
 #include "storage/table/tuple.h"
-
+#define PRO_4_TXN
 namespace bustub {
 
 /**

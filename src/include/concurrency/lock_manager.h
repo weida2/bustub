@@ -304,6 +304,7 @@ class LockManager {
    * @return false if the graph has no cycle, otherwise stores the newest transaction ID in the cycle to txn_id
    */
   auto HasCycle(txn_id_t *txn_id) -> bool;
+  auto dfs(std::vector<txn_id_t> visited, std::vector<txn_id_t> rely_tids, txn_id_t *abort_txn_id) -> bool;
 
   /**
    * @return all edges in current waits_for graph
@@ -350,6 +351,7 @@ class LockManager {
   /** Coordination */
   std::mutex row_lock_map_latch_;
 
+  // 死锁检测
   std::atomic<bool> enable_cycle_detection_;
   std::thread *cycle_detection_thread_;
   /** Waits-for graph representation. */
