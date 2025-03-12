@@ -67,7 +67,7 @@ class BasicPageGuard {
   auto As() -> const T * {
     return reinterpret_cast<const T *>(GetData());
   }
-
+ 
   auto GetDataMut() -> char * {
     is_dirty_ = true;
     return page_->GetData();

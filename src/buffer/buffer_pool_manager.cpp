@@ -94,7 +94,7 @@ auto BufferPoolManager::FetchPage(page_id_t page_id, [[maybe_unused]] AccessType
     pages_[frame_id].page_id_ = page_id;
     pages_[frame_id].pin_count_ = 1;
     pages_[frame_id].is_dirty_ = false;
-    disk_manager_->ReadPage(page_id, pages_[frame_id].GetData());
+    disk_manager_->ReadPage(page_id, pages_[frame_id].GetData());  // buffer_pool frame_id_loc
     page_table_.insert(std::make_pair(page_id, frame_id));
     replacer_->RecordAccess(frame_id, AccessType::Init);
     replacer_->SetEvictable(frame_id, false);

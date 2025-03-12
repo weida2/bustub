@@ -176,6 +176,7 @@ auto LockManager::UnlockTable(Transaction *txn, const table_oid_t &oid) -> bool 
   DeleteTxnLockTable(txn, (*it)->lock_mode_, oid);
   ti_lock_request_queue->request_queue_.erase(it);
   lock.unlock();
+  // 解锁后通知其他加锁的线程
   ti_lock_request_queue->cv_.notify_all();
 
   return true;

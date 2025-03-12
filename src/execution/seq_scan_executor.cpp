@@ -28,7 +28,7 @@ void SeqScanExecutor::Init() {
     case IsolationLevel::REPEATABLE_READ:
     case IsolationLevel::READ_COMMITTED: {
       // 禁止事务降锁
-      // 给提交前给表上锁
+      // 给表上IS锁
       if (!(exec_ctx_->GetTransaction()->IsTableExclusiveLocked(tbl_info_->oid_) ||
             exec_ctx_->GetTransaction()->IsTableIntentionExclusiveLocked(tbl_info_->oid_) ||
             exec_ctx_->GetTransaction()->IsTableSharedIntentionExclusiveLocked(tbl_info_->oid_) ||
